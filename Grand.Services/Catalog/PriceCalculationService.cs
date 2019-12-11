@@ -395,7 +395,7 @@ namespace Grand.Services.Catalog
                 quantity,
                 string.Join(",", customer.GetCustomerRoleIds()),
                 _storeContext.CurrentStore.Id);
-            var cacheTime = _catalogSettings.CacheProductPrices ? 60 : 0;
+            var cacheTime = _catalogSettings.ProductPricesCacheDuration;
             //we do not cache price for reservation products
             //otherwise, it can cause memory leaks (to store all possible date period combinations)
             if (product.ProductType == ProductType.Reservation)

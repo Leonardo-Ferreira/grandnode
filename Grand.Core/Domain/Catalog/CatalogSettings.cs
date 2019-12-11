@@ -368,9 +368,9 @@ namespace Grand.Core.Domain.Catalog
         public bool IgnoreStoreLimitations { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to cache product prices. It can significantly improve performance when enabled.
+        /// Gets or sets a value indicating the cache duration for product prices in minutes. Any value greater than 0 can significantly improve performance when enabled.
         /// </summary>
-        public bool CacheProductPrices { get; set; }
+        public int ProductPricesCacheDuration { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether to ignore load Filterable Specification Attribute Option (side-wide). It can significantly improve performance when enabled.

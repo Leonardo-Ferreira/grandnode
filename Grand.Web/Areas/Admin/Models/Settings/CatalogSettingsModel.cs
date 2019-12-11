@@ -248,7 +248,7 @@ namespace Grand.Web.Areas.Admin.Models.Settings
         public bool IgnoreFilterableAvailableStartEndDateTime_OverrideForStore { get; set; }
 
         [GrandResourceDisplayName("Admin.Configuration.Settings.Catalog.CacheProductPrices")]
-        public bool CacheProductPrices { get; set; }
+        public int ProductPricesCacheDuration { get; set; }
         public bool CacheProductPrices_OverrideForStore { get; set; }
 
         [GrandResourceDisplayName("Admin.Configuration.Settings.Catalog.ManufacturersBlockItemsToDisplay")]
