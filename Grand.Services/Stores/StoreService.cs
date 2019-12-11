@@ -32,12 +32,13 @@ namespace Grand.Services.Stores
         private const string STORES_BY_ID_KEY = "Grand.stores.id-{0}";
 
         #endregion
-        
+
         #region Fields
-        
+
         private readonly IRepository<Store> _storeRepository;
         private readonly IMediator _mediator;
-        private readonly ICacheManager _cacheManager;
+        private readonly ICacheManager _cacheManagerLevel1;
+        private readonly ICacheManager _cacheManagerLevel2;
 
         private List<Store> _allStores;
 
@@ -55,7 +56,9 @@ namespace Grand.Services.Stores
             IRepository<Store> storeRepository,
             IMediator mediator)
         {
-            _cacheManager = cacheManager.First(o => o.GetType() == typeof(MemoryCacheManager));
+            _cacheManagerLevel1 = cacheManager.First(o => o.GetType() == typeof(MemoryCacheManager));
+            _cacheManagerLevel2 = cacheManager.FirstOrDefault(o => o.GetType() == typeof(DistributedRedisCache));
+
             _storeRepository = storeRepository;
             _mediator = mediator;
         }
@@ -80,8 +83,11 @@ namespace Grand.Services.Stores
             await _storeRepository.DeleteAsync(store);
 
             //clear cache
-            await _cacheManager.Clear();
-
+            await _cacheManagerLevel1.Clear();
+            if (_cacheManagerLevel2 != null)
+            {
+                await _cacheManagerLevel2.Clear();
+            }
             //event notification
             await _mediator.EntityDeleted(store);
         }
@@ -95,7 +101,7 @@ namespace Grand.Services.Stores
             if (_allStores == null)
             {
                 string key = STORES_ALL_KEY;
-                _allStores = await _cacheManager.GetAsync(key, async () =>
+                _allStores = await _cacheManagerLevel1.GetAsync(key, async () =>
                 {
                     var res = await _storeRepository.Collection.FindAsync(new BsonDocument());
                     var aux = await res.ToListAsync();
@@ -114,9 +120,9 @@ namespace Grand.Services.Stores
         public virtual Task<Store> GetStoreById(string storeId)
         {
             string key = string.Format(STORES_BY_ID_KEY, storeId);
-            return _cacheManager.GetAsync(key, () => _storeRepository.GetByIdAsync(storeId));
+            return _cacheManagerLevel1.GetAsync(key, () => _storeRepository.GetByIdAsync(storeId));
         }
-        
+
         /// <summary>
         /// Inserts a store
         /// </summary>
@@ -129,8 +135,11 @@ namespace Grand.Services.Stores
             await _storeRepository.InsertAsync(store);
 
             //clear cache
-            await _cacheManager.Clear();
-
+            await _cacheManagerLevel1.Clear();
+            if (_cacheManagerLevel2 != null)
+            {
+                await _cacheManagerLevel2.Clear();
+            }
             //event notification
             await _mediator.EntityInserted(store);
         }
@@ -147,8 +156,11 @@ namespace Grand.Services.Stores
             await _storeRepository.UpdateAsync(store);
 
             //clear cache
-            await _cacheManager.Clear();
-
+            await _cacheManagerLevel1.Clear();
+            if (_cacheManagerLevel2 != null)
+            {
+                await _cacheManagerLevel2.Clear();
+            }
             //event notification
             await _mediator.EntityUpdated(store);
         }
