@@ -8,6 +8,7 @@ using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace Grand.Services.Stores
 {
@@ -50,11 +51,11 @@ namespace Grand.Services.Stores
         /// <param name="cacheManager">Cache manager</param>
         /// <param name="storeRepository">Store repository</param>
         /// <param name="mediator">Mediator</param>
-        public StoreService(ICacheManager cacheManager,
+        public StoreService(IEnumerable<ICacheManager> cacheManager,
             IRepository<Store> storeRepository,
             IMediator mediator)
         {
-            _cacheManager = cacheManager;
+            _cacheManager = cacheManager.First(o => o.GetType() == typeof(MemoryCacheManager));
             _storeRepository = storeRepository;
             _mediator = mediator;
         }
@@ -94,9 +95,12 @@ namespace Grand.Services.Stores
             if (_allStores == null)
             {
                 string key = STORES_ALL_KEY;
-                _allStores = await _cacheManager.GetAsync(key, () =>
+                _allStores = await _cacheManager.GetAsync(key, async () =>
                 {
-                    return _storeRepository.Collection.Find(new BsonDocument()).SortBy(x => x.DisplayOrder).ToListAsync();
+                    var res = await _storeRepository.Collection.FindAsync(new BsonDocument());
+                    var aux = await res.ToListAsync();
+
+                    return aux.OrderBy(x => x.DisplayOrder).ToList();
                 });
             }
             return _allStores;
