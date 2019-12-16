@@ -39,7 +39,7 @@ namespace Grand.Services.Configuration
         /// <param name="storeId">Store identifier</param>
         /// <param name="loadSharedValueIfNotFound">A value indicating whether a shared (for all stores) value should be loaded if a value specific for a certain is not found</param>
         /// <returns>Setting</returns>
-        Setting GetSetting(string key, string storeId = "", bool loadSharedValueIfNotFound = false);
+        Task<Setting> GetSetting(string key, string storeId = "", bool loadSharedValueIfNotFound = false);
 
         /// <summary>
         /// Get setting value by key

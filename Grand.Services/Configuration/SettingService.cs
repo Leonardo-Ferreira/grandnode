@@ -212,27 +212,28 @@ namespace Grand.Services.Configuration
         /// <param name="storeId">Store identifier</param>
         /// <param name="loadSharedValueIfNotFound">A value indicating whether a shared (for all stores) value should be loaded if a value specific for a certain is not found</param>
         /// <returns>Setting</returns>
-        public virtual Setting GetSetting(string key, string storeId = "", bool loadSharedValueIfNotFound = false)
+        public virtual async Task<Setting> GetSetting(string key, string storeId = "", bool loadSharedValueIfNotFound = false)
         {
             if (String.IsNullOrEmpty(key))
                 return null;
 
             var settings = GetAllSettingsCached();
             key = key.Trim().ToLowerInvariant();
-            if (settings.ContainsKey(key))
+            if (!settings.ContainsKey(key))
             {
-                var settingsByKey = settings[key];
-                var setting = settingsByKey.FirstOrDefault(x => x.StoreId == storeId);
-
-                //load shared value?
-                if (setting == null && !String.IsNullOrEmpty(storeId) && loadSharedValueIfNotFound)
-                    setting = settingsByKey.FirstOrDefault(x => x.StoreId == "");
-
-                if (setting != null)
-                    return GetSettingById(setting.Id);
+                return null;
             }
+            var settingsByKey = settings[key];
+            var setting = settingsByKey.FirstOrDefault(x => x.StoreId == storeId);
 
-            return null;
+            //load shared value?
+            if (setting == null && !String.IsNullOrEmpty(storeId) && loadSharedValueIfNotFound)
+                setting = settingsByKey.FirstOrDefault(x => x.StoreId == "");
+
+            if (setting == null)
+                return null;
+
+            return GetSettingById(setting.Id);
         }
 
         /// <summary>
