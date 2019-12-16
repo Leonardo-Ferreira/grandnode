@@ -1205,24 +1205,28 @@ namespace Grand.Web.Services
             });
             return cacheModel;
         }
+
         public virtual async Task<PopularProductTagsModel> PrepareProductTagsAll()
         {
             var languageId = _workContext.WorkingLanguage.Id;
             var model = new PopularProductTagsModel();
-            model.Tags = (await _productTagService
-                .GetAllProductTags())
-                .OrderBy(x => x.Name)
-                .Select(x =>
+
+            var allTags = await _productTagService.GetAllProductTags();
+            var allModels = allTags.OrderBy(x => x.Name)
+                .Select(async x =>
                 {
+                    var count = await _productTagService.GetProductCount(x.Id, _storeContext.CurrentStore.Id);
                     var ptModel = new ProductTagModel {
                         Id = x.Id,
                         Name = x.GetLocalized(y => y.Name, languageId),
                         SeName = x.SeName,
-                        ProductCount = _productTagService.GetProductCount(x.Id, _storeContext.CurrentStore.Id)
+                        ProductCount = count
                     };
                     return ptModel;
-                })
-                .ToList();
+                });
+
+            model.Tags = await Task.WhenAll(allModels);
+
             return model;
         }
 
@@ -1345,7 +1349,7 @@ namespace Grand.Web.Services
                     }
                 }
             }
-            
+
             if (_blogSettings.ShowBlogPostsInSearchAutoComplete)
             {
                 var posts = await _blogService.GetAllBlogPosts(storeId: storeId, pageSize: productNumber, blogPostName: term);
