@@ -1,10 +1,10 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Affiliates;
-using Grand.Core.Domain.Directory;
-using Grand.Core.Domain.Orders;
-using Grand.Core.Domain.Payments;
-using Grand.Core.Domain.Seo;
-using Grand.Core.Domain.Shipping;
+using Grand.Domain.Affiliates;
+using Grand.Domain.Directory;
+using Grand.Domain.Orders;
+using Grand.Domain.Payments;
+using Grand.Domain.Seo;
+using Grand.Domain.Shipping;
 using Grand.Services.Affiliates;
 using Grand.Services.Catalog;
 using Grand.Services.Customers;
@@ -180,6 +180,7 @@ namespace Grand.Web.Areas.Admin.Services
                     var orderModel = new AffiliateModel.AffiliatedOrderModel();
                     orderModel.Id = order.Id;
                     orderModel.OrderNumber = order.OrderNumber;
+                    orderModel.OrderCode = order.Code;
                     orderModel.OrderStatus = order.OrderStatus.GetLocalizedEnum(_localizationService, _workContext);
                     orderModel.PaymentStatus = order.PaymentStatus.GetLocalizedEnum(_localizationService, _workContext);
                     orderModel.ShippingStatus = order.ShippingStatus.GetLocalizedEnum(_localizationService, _workContext);

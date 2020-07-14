@@ -1,10 +1,14 @@
 ﻿using Grand.Core.Configuration;
 using Grand.Core.Infrastructure;
 using Grand.Framework.Infrastructure.Extensions;
+using Grand.Framework.Mvc.Routing;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -48,16 +52,26 @@ namespace Grand.Framework.StartupConfigure
 
             //add WebEncoderOptions
             services.AddWebEncoder();
+
+            services.AddRouting(options =>
+            {
+                options.ConstraintMap["lang"] = typeof(LanguageParameterTransformer);
+            });
+
         }
 
         /// <summary>
         /// Configure the using of added middleware
         /// </summary>
         /// <param name="application">Builder for configuring an application's request pipeline</param>
-        public void Configure(IApplicationBuilder application)
+        /// <param name="webHostEnvironment">WebHostEnvironment</param>
+        public void Configure(IApplicationBuilder application, IWebHostEnvironment webHostEnvironment)
         {
             var serviceProvider = application.ApplicationServices;
             var grandConfig = serviceProvider.GetRequiredService<GrandConfig>();
+
+            //add HealthChecks
+            application.UseGrandHealthChecks();
 
             //default security headers
             if (grandConfig.UseDefaultSecurityHeaders)
@@ -121,6 +135,14 @@ namespace Grand.Framework.StartupConfigure
             if (!grandConfig.IgnoreUsePoweredByMiddleware)
                 application.UsePoweredBy();
 
+            // Write streamlined request completion events, instead of the more verbose ones from the framework.
+            // To use the default framework request logging instead, remove this line and set the "Microsoft"
+            // level in appsettings.json to "Information".
+            if (grandConfig.UseSerilogRequestLogging)
+                application.UseSerilogRequestLogging();
+
+            //use routing
+            application.UseRouting();
 
         }
 

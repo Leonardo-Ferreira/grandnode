@@ -3,12 +3,14 @@ using Grand.Core.Caching;
 using Grand.Core.Configuration;
 using Grand.Core.Data;
 using Grand.Core.Plugins;
+using Grand.Domain.Data;
 using Grand.Framework.Security;
+using Grand.Services.Commands.Models.Security;
 using Grand.Services.Installation;
 using Grand.Services.Logging;
 using Grand.Services.Security;
-using Grand.Web.Infrastructure.Installation;
 using Grand.Web.Models.Install;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,22 +28,21 @@ namespace Grand.Web.Controllers
     {
         #region Fields
 
-        private readonly IInstallationLocalizationService _locService;
         private readonly GrandConfig _config;
         private readonly ICacheManager _cacheManager;
         private readonly IServiceProvider _serviceProvider;
-
+        private readonly IMediator _mediator;
         #endregion
 
         #region Ctor
 
-        public InstallController(IInstallationLocalizationService locService, GrandConfig config, ICacheManager cacheManager,
-            IServiceProvider serviceProvider)
+        public InstallController(GrandConfig config, ICacheManager cacheManager,
+            IServiceProvider serviceProvider, IMediator mediator)
         {
-            _locService = locService;
             _config = config;
             _cacheManager = cacheManager;
             _serviceProvider = serviceProvider;
+            _mediator = mediator;
         }
 
         #endregion
@@ -51,8 +52,7 @@ namespace Grand.Web.Controllers
         /// <summary>
         /// A value indicating whether we use MARS (Multiple Active Result Sets)
         /// </summary>
-        protected bool UseMars
-        {
+        protected bool UseMars {
             get { return false; }
         }
 
@@ -66,34 +66,33 @@ namespace Grand.Web.Controllers
             if (DataSettingsHelper.DatabaseIsInstalled())
                 return RedirectToRoute("HomePage");
 
-            var installed = await _cacheManager.GetAsync<bool>("Installed");
+            var locService = _serviceProvider.GetRequiredService<IInstallationLocalizationService>();
+
+            var installed = await _cacheManager.GetAsync("Installed", async () => { return await Task.FromResult(false); });
             if (installed)
                 return View(new InstallModel() { Installed = true });
 
-            var model = new InstallModel
-            {
+            var model = new InstallModel {
                 AdminEmail = "admin@yourstore.com",
                 InstallSampleData = false,
                 DatabaseConnectionString = "",
                 DataProvider = "mongodb",
             };
-            foreach (var lang in _locService.GetAvailableLanguages())
+            foreach (var lang in locService.GetAvailableLanguages())
             {
-                model.AvailableLanguages.Add(new SelectListItem
-                {
+                model.AvailableLanguages.Add(new SelectListItem {
                     Value = Url.Action("ChangeLanguage", "Install", new { language = lang.Code }),
                     Text = lang.Name,
-                    Selected = _locService.GetCurrentLanguage().Code == lang.Code,
+                    Selected = locService.GetCurrentLanguage().Code == lang.Code,
                 });
             }
             //prepare collation list
-            foreach (var col in _locService.GetAvailableCollations())
+            foreach (var col in locService.GetAvailableCollations())
             {
-                model.AvailableCollation.Add(new SelectListItem
-                {
+                model.AvailableCollation.Add(new SelectListItem {
                     Value = col.Value,
                     Text = col.Name,
-                    Selected = _locService.GetCurrentLanguage().Code == col.Value,
+                    Selected = locService.GetCurrentLanguage().Code == col.Value,
                 });
             }
             return View(model);
@@ -105,6 +104,8 @@ namespace Grand.Web.Controllers
             if (DataSettingsHelper.DatabaseIsInstalled())
                 return RedirectToRoute("HomePage");
 
+            var locService = _serviceProvider.GetRequiredService<IInstallationLocalizationService>();
+
             if (model.DatabaseConnectionString != null)
                 model.DatabaseConnectionString = model.DatabaseConnectionString.Trim();
 
@@ -114,7 +115,7 @@ namespace Grand.Web.Controllers
             {
                 if (String.IsNullOrEmpty(model.DatabaseConnectionString))
                 {
-                    ModelState.AddModelError("", _locService.GetResource("ConnectionStringRequired"));
+                    ModelState.AddModelError("", locService.GetResource("ConnectionStringRequired"));
                 }
                 else
                 {
@@ -125,11 +126,11 @@ namespace Grand.Web.Controllers
             {
                 if (String.IsNullOrEmpty(model.MongoDBDatabaseName))
                 {
-                    ModelState.AddModelError("", _locService.GetResource("DatabaseNameRequired"));
+                    ModelState.AddModelError("", locService.GetResource("DatabaseNameRequired"));
                 }
                 if (String.IsNullOrEmpty(model.MongoDBServerName))
                 {
-                    ModelState.AddModelError("", _locService.GetResource("MongoDBServerNameRequired"));
+                    ModelState.AddModelError("", locService.GetResource("MongoDBServerNameRequired"));
                 }
                 string userNameandPassword = "";
                 if (!(String.IsNullOrEmpty(model.MongoDBUsername)))
@@ -153,7 +154,7 @@ namespace Grand.Web.Controllers
                     var found = database.ListCollectionsAsync(new ListCollectionsOptions { Filter = filter }).Result;
 
                     if (found.Any())
-                        ModelState.AddModelError("", _locService.GetResource("AlreadyInstalled"));
+                        ModelState.AddModelError("", locService.GetResource("AlreadyInstalled"));
                 }
                 catch (Exception ex)
                 {
@@ -161,7 +162,7 @@ namespace Grand.Web.Controllers
                 }
             }
             else
-                ModelState.AddModelError("", _locService.GetResource("ConnectionStringRequired"));
+                ModelState.AddModelError("", locService.GetResource("ConnectionStringRequired"));
 
             var webHelper = _serviceProvider.GetRequiredService<IWebHelper>();
 
@@ -169,12 +170,12 @@ namespace Grand.Web.Controllers
             var dirsToCheck = FilePermissionHelper.GetDirectoriesWrite();
             foreach (string dir in dirsToCheck)
                 if (!FilePermissionHelper.CheckPermissions(dir, false, true, true, false))
-                    ModelState.AddModelError("", string.Format(_locService.GetResource("ConfigureDirectoryPermissions"), WindowsIdentity.GetCurrent().Name, dir));
+                    ModelState.AddModelError("", string.Format(locService.GetResource("ConfigureDirectoryPermissions"), WindowsIdentity.GetCurrent().Name, dir));
 
             var filesToCheck = FilePermissionHelper.GetFilesWrite();
             foreach (string file in filesToCheck)
                 if (!FilePermissionHelper.CheckPermissions(file, false, true, true, true))
-                    ModelState.AddModelError("", string.Format(_locService.GetResource("ConfigureFilePermissions"), WindowsIdentity.GetCurrent().Name, file));
+                    ModelState.AddModelError("", string.Format(locService.GetResource("ConfigureFilePermissions"), WindowsIdentity.GetCurrent().Name, file));
 
             if (ModelState.IsValid)
             {
@@ -182,8 +183,7 @@ namespace Grand.Web.Controllers
                 try
                 {
                     //save settings
-                    var settings = new DataSettings
-                    {
+                    var settings = new DataSettings {
                         DataProvider = "mongodb",
                         DataConnectionString = connectionString
                     };
@@ -229,7 +229,7 @@ namespace Grand.Web.Controllers
                         catch (Exception ex)
                         {
                             var _logger = _serviceProvider.GetRequiredService<ILogger>();
-                            await _logger.InsertLog(Core.Domain.Logging.LogLevel.Error, "Error during installing plugin " + plugin.PluginDescriptor.SystemName,
+                            await _logger.InsertLog(Domain.Logging.LogLevel.Error, "Error during installing plugin " + plugin.PluginDescriptor.SystemName,
                                 ex.Message + " " + ex.InnerException?.Message);
                         }
                     }
@@ -240,7 +240,7 @@ namespace Grand.Web.Controllers
                     foreach (var providerType in permissionProviders)
                     {
                         var provider = (IPermissionProvider)Activator.CreateInstance(providerType);
-                        await _serviceProvider.GetRequiredService<IPermissionService>().InstallPermissions(provider);
+                        await _mediator.Send(new InstallPermissionsCommand() { PermissionProvider = provider });
                     }
 
                     //restart application
@@ -255,29 +255,27 @@ namespace Grand.Web.Controllers
 
                     System.IO.File.Delete(CommonHelper.MapPath("~/App_Data/Settings.txt"));
 
-                    ModelState.AddModelError("", string.Format(_locService.GetResource("SetupFailed"), exception.Message + " " + exception.InnerException?.Message));
+                    ModelState.AddModelError("", string.Format(locService.GetResource("SetupFailed"), exception.Message + " " + exception.InnerException?.Message));
                 }
             }
 
             //prepare language list
-            foreach (var lang in _locService.GetAvailableLanguages())
+            foreach (var lang in locService.GetAvailableLanguages())
             {
-                model.AvailableLanguages.Add(new SelectListItem
-                {
+                model.AvailableLanguages.Add(new SelectListItem {
                     Value = Url.Action("ChangeLanguage", "Install", new { language = lang.Code }),
                     Text = lang.Name,
-                    Selected = _locService.GetCurrentLanguage().Code == lang.Code,
+                    Selected = locService.GetCurrentLanguage().Code == lang.Code,
                 });
             }
 
             //prepare collation list
-            foreach (var col in _locService.GetAvailableCollations())
+            foreach (var col in locService.GetAvailableCollations())
             {
-                model.AvailableCollation.Add(new SelectListItem
-                {
+                model.AvailableCollation.Add(new SelectListItem {
                     Value = col.Value,
                     Text = col.Name,
-                    Selected = _locService.GetCurrentLanguage().Code == col.Value,
+                    Selected = locService.GetCurrentLanguage().Code == col.Value,
                 });
             }
 
@@ -289,7 +287,8 @@ namespace Grand.Web.Controllers
             if (DataSettingsHelper.DatabaseIsInstalled())
                 return RedirectToRoute("HomePage");
 
-            _locService.SaveCurrentLanguage(language);
+            var locService = _serviceProvider.GetRequiredService<IInstallationLocalizationService>();
+            locService.SaveCurrentLanguage(language);
 
             //Reload the page
             return RedirectToAction("Index", "Install");

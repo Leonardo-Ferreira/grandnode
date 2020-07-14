@@ -1,9 +1,10 @@
 using Grand.Core;
+using Grand.Domain;
 using Grand.Core.Caching;
-using Grand.Core.Data;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Security;
+using Grand.Domain.Data;
+using Grand.Domain.Catalog;
+using Grand.Domain.Customers;
+using Grand.Domain.Security;
 using Grand.Services.Events;
 using MediatR;
 using System;
@@ -75,7 +76,7 @@ namespace Grand.Services.Security
             await _aclRecordRepository.DeleteAsync(aclRecord);
 
             //cache
-            await _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(ACLRECORD_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityDeleted(aclRecord);
@@ -104,7 +105,7 @@ namespace Grand.Services.Security
             await _aclRecordRepository.InsertAsync(aclRecord);
 
             //cache
-            await _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(ACLRECORD_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityInserted(aclRecord);
@@ -122,7 +123,7 @@ namespace Grand.Services.Security
             await _aclRecordRepository.UpdateAsync(aclRecord);
 
             //cache
-            await _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(ACLRECORD_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityUpdated(aclRecord);

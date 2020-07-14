@@ -11,7 +11,6 @@ using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
 
@@ -29,21 +28,23 @@ namespace Grand.Core
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly HostingConfig _hostingConfig;
         private readonly IHostApplicationLifetime _applicationLifetime;
-        private readonly IServiceProvider _serviceProvider;
+
         #endregion
 
         #region Constructor
 
         /// <summary>
         /// Ctor
-        /// </summary>
-        /// <param name="httpContext">HTTP context</param>
-        public WebHelper(IHttpContextAccessor httpContextAccessor, HostingConfig hostingConfig, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
+        /// </summary>        
+        public WebHelper(
+            IHttpContextAccessor httpContextAccessor,
+            HostingConfig hostingConfig,
+            IHostApplicationLifetime applicationLifetime
+            )
         {
             _hostingConfig = hostingConfig;
             _httpContextAccessor = httpContextAccessor;
             _applicationLifetime = applicationLifetime;
-            _serviceProvider = serviceProvider;
         }
 
         #endregion
@@ -71,7 +72,7 @@ namespace Grand.Core
 
             return true;
         }
-        
+
         protected virtual bool IsIpAddressSet(IPAddress address)
         {
             return address != null && address.ToString() != NullIpAddress;
@@ -244,7 +245,7 @@ namespace Grand.Core
             //if host is empty (it is possible only when HttpContext is not available), use URL of a store entity configured in admin area
             if (string.IsNullOrEmpty(storeHost) && DataSettingsHelper.DatabaseIsInstalled())
             {
-                var currentStore = _serviceProvider.GetRequiredService<IStoreContext>().CurrentStore;
+                var currentStore = _httpContextAccessor.HttpContext.RequestServices.GetRequiredService<IStoreContext>().CurrentStore;
                 if (currentStore != null)
                     storeLocation = !currentStore.SslEnabled ? currentStore.Url : currentStore.SecureUrl;
                 else
@@ -295,14 +296,14 @@ namespace Grand.Core
 
             var query = QueryHelpers.ParseQuery(uri.Query);
 
-            var items = query.SelectMany(x => x.Value, (col, val) => 
+            var items = query.SelectMany(x => x.Value, (col, val) =>
                 new KeyValuePair<string, string>(col.Key, val)).ToList();
 
-            items.RemoveAll(x => x.Key == key); 
+            items.RemoveAll(x => x.Key == key);
 
             var qb = new QueryBuilder(items);
 
-            if(!string.IsNullOrEmpty(value))
+            if (!string.IsNullOrEmpty(value))
                 qb.Add(key, value);
 
             var returnUrl = baseUri + qb.ToQueryString();
@@ -331,19 +332,14 @@ namespace Grand.Core
         /// </summary>
         public virtual void RestartAppDomain()
         {
-            if(OperatingSystem.IsWindows())
-                File.SetLastWriteTimeUtc(CommonHelper.MapPath("~/web.config"), DateTime.UtcNow);
-            else
-                _applicationLifetime.StopApplication();
+            _applicationLifetime.StopApplication();
         }
 
         /// <summary>
         /// Gets a value that indicates whether the client is being redirected to a new location
         /// </summary>
-        public virtual bool IsRequestBeingRedirected
-        {
-            get
-            {
+        public virtual bool IsRequestBeingRedirected {
+            get {
                 var response = _httpContextAccessor.HttpContext.Response;
                 int[] redirectionStatusCodes = { 301, 302 };
                 return redirectionStatusCodes.Contains(response.StatusCode);
@@ -354,17 +350,14 @@ namespace Grand.Core
         /// <summary>
         /// Gets or sets a value that indicates whether the client is being redirected to a new location using POST
         /// </summary>
-        public virtual bool IsPostBeingDone
-        {
-            get
-            {
+        public virtual bool IsPostBeingDone {
+            get {
                 if (_httpContextAccessor.HttpContext.Items["grand.IsPOSTBeingDone"] == null)
                     return false;
 
                 return Convert.ToBoolean(_httpContextAccessor.HttpContext.Items["grand.IsPOSTBeingDone"]);
             }
-            set
-            {
+            set {
                 _httpContextAccessor.HttpContext.Items["grand.IsPOSTBeingDone"] = value;
             }
         }
@@ -408,6 +401,7 @@ namespace Grand.Core
 
             return rawUrl;
         }
+
         #endregion
     }
 }

@@ -1,8 +1,8 @@
 ﻿using Grand.Core;
-using Grand.Core.Data;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Localization;
-using Grand.Core.Domain.Orders;
+using Grand.Domain.Data;
+using Grand.Domain.Catalog;
+using Grand.Domain.Localization;
+using Grand.Domain.Orders;
 using Grand.Core.Tests.Caching;
 using Grand.Services.Catalog;
 using Grand.Services.Directory;
@@ -95,7 +95,11 @@ namespace Grand.Services.Orders.Tests
                 DisplayOrder = 3,
             };
 
-
+            var tempEventPublisher = new Mock<IMediator>();
+            {
+                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
+                _eventPublisher = tempEventPublisher.Object;
+            }
 
             var tempCheckoutAttributeRepo = new Mock<IRepository<CheckoutAttribute>>();
             {
@@ -110,15 +114,7 @@ namespace Grand.Services.Orders.Tests
                 _checkoutAttributeRepo = tempCheckoutAttributeRepo.Object;
             }
 
-            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object);
-
-
-            var tempEventPublisher = new Mock<IMediator>();
-            {
-                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
-                _eventPublisher = tempEventPublisher.Object;
-            }
-
+            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object, _eventPublisher);
 
             _checkoutAttributeService = new CheckoutAttributeService(cacheManager, _checkoutAttributeRepo,
                _eventPublisher, null, null);

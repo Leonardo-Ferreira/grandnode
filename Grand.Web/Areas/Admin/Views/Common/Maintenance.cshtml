@@ -3,7 +3,7 @@
     //page title
     ViewBag.Title = T("Admin.System.Maintenance").Text;
 }
-<form asp-controller="Common" asp-action="Maintenance" method="post">
+<form asp-area="Admin" asp-controller="Common" asp-action="Maintenance" method="post">
     
     <div class="row">
         <div class="col-md-12">
@@ -70,13 +70,13 @@
                                 </div>
                             </div>
                             <div class="form-group">
-                                <admin-label asp-for="DeleteExportedFiles.StartDate" />:
+                                <admin-label asp-for="DeleteExportedFiles.StartDate" />
                                 <div class="col-xs-8 col-md-4 col-sm-4">
                                     <admin-input asp-for="DeleteExportedFiles.StartDate" />
                                 </div>
                             </div>
                             <div class="form-group">
-                                <admin-label asp-for="DeleteExportedFiles.EndDate" />:
+                                <admin-label asp-for="DeleteExportedFiles.EndDate" />
                                 <div class="col-xs-8 col-md-4 col-sm-4">
                                     <admin-input asp-for="DeleteExportedFiles.EndDate" />
                                 </div>
@@ -108,7 +108,26 @@
                                 <strong>@T("Admin.System.Maintenance.ConvertPicture")</strong>
                             </div>
                             <div class="form-group">
-                                <input type="submit" name="convert-picture-webp" class="btn red col-md-offset-3" value="@T("Admin.System.Maintenance.ConvertPicture.Button")" />
+                                <button type="button" class="btn btn-danger red col-md-offset-3" data-toggle="modal" data-target="#convertPicutresConfirmationModal">@T("Admin.System.Maintenance.ConvertPicture.Button")</button>
+                                <div class="modal fade" id="convertPicutresConfirmationModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                    <div class="modal-dialog" role="document">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="exampleModalLabel">@T("Admin.Common.AreYouSure")</h5>
+                                                <button type="button" class="close" data-dismiss="modal" aria-label="@T("Common.Close")">
+                                                    <span aria-hidden="true">&times;</span>
+                                                </button>
+                                            </div>
+                                            <div class="modal-body">
+                                                @T("Admin.Common.UndoneChange")
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-dismiss="modal">@T("Common.Close")</button>
+                                                <input type="submit" name="convert-picture-webp" class="btn red col-md-offset-3" value="@T("Admin.Common.SaveChanges")" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             @if (Model.ConvertedPictureModel.NumberOfConvertItems >= 0)
                             {

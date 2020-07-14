@@ -1,6 +1,6 @@
-﻿using Grand.Core;
-using Grand.Core.Data;
-using Grand.Core.Domain.PushNotifications;
+﻿using Grand.Domain;
+using Grand.Domain.Data;
+using Grand.Domain.PushNotifications;
 using Grand.Services.Events;
 using Grand.Services.Localization;
 using Grand.Services.Logging;
@@ -158,10 +158,15 @@ namespace Grand.Services.PushNotifications
                     return (false, _localizationService.GetResource("Admin.PushNotifications.Error.NoReceivers"));
                 }
 
-                foreach (var receiver in receivers)
+                int batchsize = 1000;
+                for (int batch = 0; batch <= Math.Round((decimal)(receivers.Count / batchsize), 0, MidpointRounding.ToEven); batch++)
                 {
-                    if (!ids.Contains(receiver.Token))
-                        ids.Add(receiver.Token);
+                    var t = receivers.Skip(batch * batchsize).Take(batchsize);
+                    foreach (var receiver in receivers)
+                    {
+                        if (!ids.Contains(receiver.Token))
+                            ids.Add(receiver.Token);
+                    }
                 }
             }
 
@@ -198,7 +203,7 @@ namespace Grand.Services.PushNotifications
 
                                 if (response.failure > 0)
                                 {
-                                    await _logger.InsertLog(Core.Domain.Logging.LogLevel.Error, "Error occured while sending push notification.", sResponseFromServer);
+                                    await _logger.InsertLog(Domain.Logging.LogLevel.Error, "Error occured while sending push notification.", sResponseFromServer);
                                 }
 
                                 await InsertPushMessage(new PushMessage

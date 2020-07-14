@@ -1,4 +1,4 @@
-﻿using Grand.Core.Domain.Catalog;
+﻿using Grand.Domain.Catalog;
 using Grand.Framework.Controllers;
 using Grand.Framework.Kendoui;
 using Grand.Framework.Mvc;
@@ -351,7 +351,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             foreach (var item in categories)
             {
                 var categoryModel = item.ToModel();
-                categoryModel.Breadcrumb = await item.GetFormattedBreadCrumb(categoryService);
+                categoryModel.Breadcrumb = await categoryService.GetFormattedBreadCrumb(item);
                 items.Add(categoryModel);
             }
             var gridModel = new DataSourceResult

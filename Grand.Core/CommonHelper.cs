@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -240,7 +239,17 @@ namespace Grand.Core
         /// <summary>
         /// Gets or sets application base path
         /// </summary>
-        internal static string BaseDirectory => HostingEnvironment.ContentRootPath;
+        public static string BaseDirectory { get; set; }
+
+        /// <summary>
+        /// Gets or sets application default cache time minutes
+        /// </summary>
+        public static int CacheTimeMinutes { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating for cookie expires in hours
+        /// </summary>
+        public static int CookieAuthExpires { get; set; }
 
         /// <summary>
         ///  Depth-first recursive delete, with handling for descendant directories open in Windows Explorer.
@@ -272,7 +281,5 @@ namespace Grand.Core
                 Directory.Delete(path, true);
             }
         }
-
-        public static IWebHostEnvironment HostingEnvironment { get; set; }
     }
 }

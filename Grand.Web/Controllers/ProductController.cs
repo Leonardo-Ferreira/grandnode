@@ -1,24 +1,26 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Media;
-using Grand.Core.Domain.Orders;
+using Grand.Domain.Catalog;
+using Grand.Domain.Customers;
+using Grand.Domain.Media;
+using Grand.Domain.Orders;
 using Grand.Framework.Controllers;
 using Grand.Framework.Mvc;
 using Grand.Framework.Mvc.Filters;
 using Grand.Framework.Mvc.Rss;
-using Grand.Framework.Security;
 using Grand.Framework.Security.Captcha;
 using Grand.Services.Catalog;
 using Grand.Services.Customers;
 using Grand.Services.Localization;
 using Grand.Services.Logging;
 using Grand.Services.Media;
+using Grand.Services.Notifications.Catalog;
 using Grand.Services.Orders;
 using Grand.Services.Security;
 using Grand.Services.Seo;
 using Grand.Services.Stores;
-using Grand.Web.Interfaces;
+using Grand.Web.Commands.Models.Products;
+using Grand.Web.Events;
+using Grand.Web.Features.Models.Products;
 using Grand.Web.Models.Catalog;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -37,7 +39,6 @@ namespace Grand.Web.Controllers
         #region Fields
 
         private readonly IProductService _productService;
-        private readonly IProductViewModelService _productViewModelService;
         private readonly IWorkContext _workContext;
         private readonly IStoreContext _storeContext;
         private readonly ILocalizationService _localizationService;
@@ -49,6 +50,7 @@ namespace Grand.Web.Controllers
         private readonly IPermissionService _permissionService;
         private readonly ICustomerActivityService _customerActivityService;
         private readonly ICustomerActionEventService _customerActionEventService;
+        private readonly IMediator _mediator;
         private readonly CatalogSettings _catalogSettings;
         private readonly ShoppingCartSettings _shoppingCartSettings;
         private readonly CaptchaSettings _captchaSettings;
@@ -59,7 +61,6 @@ namespace Grand.Web.Controllers
 
         public ProductController(
             IProductService productService,
-            IProductViewModelService productViewModelService,
             IWorkContext workContext,
             IStoreContext storeContext,
             ILocalizationService localizationService,
@@ -71,13 +72,13 @@ namespace Grand.Web.Controllers
             IPermissionService permissionService,
             ICustomerActivityService customerActivityService,
             ICustomerActionEventService customerActionEventService,
+            IMediator mediator,
             CatalogSettings catalogSettings,
             ShoppingCartSettings shoppingCartSettings,
             CaptchaSettings captchaSettings
         )
         {
             _productService = productService;
-            _productViewModelService = productViewModelService;
             _workContext = workContext;
             _storeContext = storeContext;
             _localizationService = localizationService;
@@ -89,6 +90,7 @@ namespace Grand.Web.Controllers
             _permissionService = permissionService;
             _customerActivityService = customerActivityService;
             _customerActionEventService = customerActionEventService;
+            _mediator = mediator;
             _catalogSettings = catalogSettings;
             _shoppingCartSettings = shoppingCartSettings;
             _captchaSettings = captchaSettings;
@@ -157,10 +159,15 @@ namespace Grand.Web.Controllers
             }
 
             //prepare the model
-            var model = await _productViewModelService.PrepareProductDetailsPage(product, updatecartitem, false);
+            var model = await _mediator.Send(new GetProductDetailsPage() {
+                Store = _storeContext.CurrentStore,
+                Product = product,
+                IsAssociatedProduct = false,
+                UpdateCartItem = updatecartitem
+            });
 
             //product template
-            var productTemplateViewPath = await _productViewModelService.PrepareProductTemplateViewPath(product.ProductTemplateId);
+            var productTemplateViewPath = await _mediator.Send(new GetProductTemplateViewPath() { ProductTemplateId = product.ProductTemplateId });
 
             //save as recently viewed
             await _recentlyViewedProductsService.AddProductToRecentlyViewedList(customer.Id, product.Id);
@@ -175,7 +182,7 @@ namespace Grand.Web.Controllers
                     DisplayEditLink(Url.Action("Edit", "Product", new { id = product.Id, area = "Admin" }));
                 }
             }
-
+            
             //activity log
             await _customerActivityService.InsertActivity("PublicStore.ViewProduct", product.Id, _localizationService.GetResource("ActivityLog.PublicStore.ViewProduct"), product.Name);
             await _customerActionEventService.Viewed(customer, this.HttpContext.Request.Path.ToString(), this.Request.Headers[HeaderNames.Referer].ToString() != null ? Request.Headers[HeaderNames.Referer].ToString() : "");
@@ -193,7 +200,15 @@ namespace Grand.Web.Controllers
             if (product == null)
                 return new NullJsonResult();
 
-            var model = await _productViewModelService.PrepareProductDetailsAttributeChangeModel(product, validateAttributeConditions, loadPicture, form);
+            var model = await _mediator.Send(new GetProductDetailsAttributeChange() {
+                Currency = _workContext.WorkingCurrency,
+                Customer = _workContext.CurrentCustomer,
+                Store = _storeContext.CurrentStore,
+                Form = form,
+                LoadPicture = loadPicture,
+                Product = product,
+                ValidateAttributeConditions = validateAttributeConditions
+            });
 
             return Json(new
             {
@@ -232,7 +247,7 @@ namespace Grand.Web.Controllers
             [FromServices] IDownloadService downloadService)
         {
             var product = await _productService.GetProductById(productId);
-            if(product == null)
+            if (product == null)
             {
                 return Json(new
                 {
@@ -293,8 +308,7 @@ namespace Grand.Web.Controllers
                 }
             }
 
-            var download = new Download
-            {
+            var download = new Download {
                 DownloadGuid = Guid.NewGuid(),
                 UseDownloadUrl = false,
                 DownloadUrl = "",
@@ -388,10 +402,15 @@ namespace Grand.Web.Controllers
             }
 
             //prepare the model
-            var model = await _productViewModelService.PrepareProductDetailsPage(product, null, false);
+            var model = await _mediator.Send(new GetProductDetailsPage() {
+                Store = _storeContext.CurrentStore,
+                Product = product,
+                IsAssociatedProduct = false,
+                UpdateCartItem = null
+            });
 
             //product template
-            var productTemplateViewPath = await _productViewModelService.PrepareProductTemplateViewPath(product.ProductTemplateId);
+            var productTemplateViewPath = await _mediator.Send(new GetProductTemplateViewPath() { ProductTemplateId = product.ProductTemplateId });
 
             //save as recently viewed
             await _recentlyViewedProductsService.AddProductToRecentlyViewedList(customer.Id, product.Id);
@@ -421,8 +440,10 @@ namespace Grand.Web.Controllers
 
             var products = await _recentlyViewedProductsService.GetRecentlyViewedProducts(_workContext.CurrentCustomer.Id, _catalogSettings.RecentlyViewedProductsNumber);
 
-            var model = new List<ProductOverviewModel>();
-            model.AddRange(await _productViewModelService.PrepareProductOverviewModels(products));
+            //prepare model
+            var model = await _mediator.Send(new GetProductOverview() {
+                Products = products,
+            });
 
             return View(model);
         }
@@ -430,6 +451,7 @@ namespace Grand.Web.Controllers
         #endregion
 
         #region Recently added products
+
         public virtual async Task<IActionResult> NewProducts()
         {
             if (!_catalogSettings.NewProductsEnabled)
@@ -442,8 +464,12 @@ namespace Grand.Web.Controllers
                 orderBy: ProductSortingEnum.CreatedOn,
                 pageSize: _catalogSettings.NewProductsNumber)).products;
 
-            var model = new List<ProductOverviewModel>();
-            model.AddRange(await _productViewModelService.PrepareProductOverviewModels(products, prepareSpecificationAttributes: _catalogSettings.ShowSpecAttributeOnCatalogPages));
+
+            //prepare model
+            var model = await _mediator.Send(new GetProductOverview() {
+                PrepareSpecificationAttributes = _catalogSettings.ShowSpecAttributeOnCatalogPages,
+                Products = products,
+            });
 
             return View(model);
         }
@@ -488,8 +514,14 @@ namespace Grand.Web.Controllers
             if (product == null || !product.Published || !product.AllowCustomerReviews)
                 return RedirectToRoute("HomePage");
 
-            var model = new ProductReviewsModel();
-            await _productViewModelService.PrepareProductReviewsModel(model, product);
+            var model = await _mediator.Send(new GetProductReviews() {
+                Customer = _workContext.CurrentCustomer,
+                Language = _workContext.WorkingLanguage,
+                Product = product,
+                Store = _storeContext.CurrentStore,
+                Size = _catalogSettings.NumberOfReview
+            });
+
             //only registered users can leave reviews
             if (_workContext.CurrentCustomer.IsGuest() && !_catalogSettings.AllowAnonymousUsersToReviewProduct)
                 ModelState.AddModelError("", _localizationService.GetResource("Reviews.OnlyRegisteredUsersCanWriteReviews"));
@@ -503,7 +535,7 @@ namespace Grand.Web.Controllers
         [AutoValidateAntiforgeryToken]
         [ValidateCaptcha]
         public virtual async Task<IActionResult> ProductReviewsAdd(string productId, ProductReviewsModel model, bool captchaValid,
-            [FromServices] IOrderService orderService, [FromServices] IMediator mediator)
+            [FromServices] IOrderService orderService)
         {
             var product = await _productService.GetProductById(productId);
             if (product == null || !product.Published || !product.AllowCustomerReviews)
@@ -526,15 +558,30 @@ namespace Grand.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                var productReview = await _productViewModelService.InsertProductReview(product, model);
-                //activity log
+                var productReview = await _mediator.Send(new InsertProductReviewCommand() {
+                    Customer = _workContext.CurrentCustomer,
+                    Store = _storeContext.CurrentStore,
+                    Model = model,
+                    Product = product
+                });
+
+                //notification
+                await _mediator.Publish(new ProductReviewEvent(product, model.AddProductReview));
+
                 await _customerActivityService.InsertActivity("PublicStore.AddProductReview", product.Id, _localizationService.GetResource("ActivityLog.PublicStore.AddProductReview"), product.Name);
 
                 //raise event
                 if (productReview.IsApproved)
-                    await mediator.Publish(new ProductReviewApprovedEvent(productReview));
+                    await _mediator.Publish(new ProductReviewApprovedEvent(productReview));
 
-                await _productViewModelService.PrepareProductReviewsModel(model, product);
+                model = await _mediator.Send(new GetProductReviews() {
+                    Customer = _workContext.CurrentCustomer,
+                    Language = _workContext.WorkingLanguage,
+                    Product = product,
+                    Store = _storeContext.CurrentStore,
+                    Size = _catalogSettings.NumberOfReview
+                });
+
                 model.AddProductReview.Title = null;
                 model.AddProductReview.ReviewText = null;
 
@@ -548,15 +595,27 @@ namespace Grand.Web.Controllers
             }
 
             //If we got this far, something failed, redisplay form
-            await _productViewModelService.PrepareProductReviewsModel(model, product);
-            return View(model);
+            var newmodel = await _mediator.Send(new GetProductReviews() {
+                Customer = _workContext.CurrentCustomer,
+                Language = _workContext.WorkingLanguage,
+                Product = product,
+                Store = _storeContext.CurrentStore,
+                Size = _catalogSettings.NumberOfReview
+            });
+
+            newmodel.AddProductReview.Rating = model.AddProductReview.Rating;
+            newmodel.AddProductReview.ReviewText = model.AddProductReview.ReviewText;
+            newmodel.AddProductReview.Title = model.AddProductReview.Title;
+
+            return View(newmodel);
         }
 
         [HttpPost]
-        public virtual async Task<IActionResult> SetProductReviewHelpfulness(string productReviewId, string productId, bool washelpful, [FromServices] ICustomerService customerService)
+        public virtual async Task<IActionResult> SetProductReviewHelpfulness(string productReviewId, string productId, bool washelpful, 
+            [FromServices] ICustomerService customerService, [FromServices] IProductReviewService productReviewService)
         {
             var product = await _productService.GetProductById(productId);
-            var productReview = await _productService.GetProductReviewById(productReviewId);
+            var productReview = await productReviewService.GetProductReviewById(productReviewId);
             if (productReview == null)
                 throw new ArgumentException("No product review found with the specified id");
 
@@ -592,14 +651,13 @@ namespace Grand.Web.Controllers
             else
             {
                 //insert new helpfulness
-                prh = new ProductReviewHelpfulness
-                {
+                prh = new ProductReviewHelpfulness {
                     ProductReviewId = productReview.Id,
                     CustomerId = _workContext.CurrentCustomer.Id,
                     WasHelpful = washelpful,
                 };
                 productReview.ProductReviewHelpfulnessEntries.Add(prh);
-                await _productService.UpdateProductReview(productReview);
+                await productReviewService.UpdateProductReview(productReview);
                 if (!_workContext.CurrentCustomer.HasContributions)
                 {
                     await customerService.UpdateContributions(_workContext.CurrentCustomer);
@@ -610,7 +668,7 @@ namespace Grand.Web.Controllers
             //new totals
             productReview.HelpfulYesTotal = productReview.ProductReviewHelpfulnessEntries.Count(x => x.WasHelpful);
             productReview.HelpfulNoTotal = productReview.ProductReviewHelpfulnessEntries.Count(x => !x.WasHelpful);
-            await _productService.UpdateProductReview(productReview);
+            await productReviewService.UpdateProductReview(productReview);
 
             return Json(new
             {
@@ -664,7 +722,13 @@ namespace Grand.Web.Controllers
             if (ModelState.IsValid)
             {
                 //email
-                await _productViewModelService.SendProductEmailAFriendMessage(product, model);
+                await _mediator.Send(new SendProductEmailAFriendMessageCommand() {
+                    Customer = _workContext.CurrentCustomer,
+                    Product = product,
+                    Language = _workContext.WorkingLanguage,
+                    Store = _storeContext.CurrentStore,
+                    Model = model,
+                });
 
                 model.ProductId = product.Id;
                 model.ProductName = product.GetLocalized(x => x.Name, _workContext.WorkingLanguage.Id);
@@ -694,7 +758,12 @@ namespace Grand.Web.Controllers
             if (product == null || !product.Published || !_catalogSettings.AskQuestionEnabled)
                 return NotFound();
 
-            var model = await _productViewModelService.PrepareProductAskQuestionModel(product);
+            var model = await _mediator.Send(new GetProductAskQuestion() {
+                Product = product,
+                Customer = _workContext.CurrentCustomer,
+                Language = _workContext.WorkingLanguage,
+                Store = _storeContext.CurrentStore
+            });
 
             return View(model);
         }
@@ -718,7 +787,13 @@ namespace Grand.Web.Controllers
             if (ModelState.IsValid)
             {
                 // email
-                await _productViewModelService.SendProductAskQuestionMessage(product, model);
+                await _mediator.Send(new SendProductAskQuestionMessageCommand() {
+                    Customer = _workContext.CurrentCustomer,
+                    Language = _workContext.WorkingLanguage,
+                    Store = _storeContext.CurrentStore,
+                    Model = model,
+                    Product = product
+                });
 
                 //activity log
                 await _customerActivityService.InsertActivity("PublicStore.AskQuestion", _workContext.CurrentCustomer.Id, _localizationService.GetResource("ActivityLog.PublicStore.AskQuestion"));
@@ -764,15 +839,22 @@ namespace Grand.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                var productaskqestionmodel = new ProductAskQuestionModel()
-                {
+                var productaskqestionmodel = new ProductAskQuestionModel() {
                     Email = model.AskQuestionEmail,
                     FullName = model.AskQuestionFullName,
                     Phone = model.AskQuestionPhone,
                     Message = model.AskQuestionMessage
                 };
+
                 // email
-                await _productViewModelService.SendProductAskQuestionMessage(product, productaskqestionmodel);
+                await _mediator.Send(new SendProductAskQuestionMessageCommand() {
+                    Customer = _workContext.CurrentCustomer,
+                    Language = _workContext.WorkingLanguage,
+                    Store = _storeContext.CurrentStore,
+                    Model = productaskqestionmodel,
+                    Product = product
+                });
+
                 //activity log
                 await _customerActivityService.InsertActivity("PublicStore.AskQuestion", _workContext.CurrentCustomer.Id, _localizationService.GetResource("ActivityLog.PublicStore.AskQuestion"));
                 //return Json
@@ -855,8 +937,7 @@ namespace Grand.Web.Controllers
             if (!_catalogSettings.CompareProductsEnabled)
                 return RedirectToRoute("HomePage");
 
-            var model = new CompareProductsModel
-            {
+            var model = new CompareProductsModel {
                 IncludeShortDescriptionInCompareProducts = _catalogSettings.IncludeShortDescriptionInCompareProducts,
                 IncludeFullDescriptionInCompareProducts = _catalogSettings.IncludeFullDescriptionInCompareProducts,
             };
@@ -868,11 +949,13 @@ namespace Grand.Web.Controllers
             //availability dates
             products = products.Where(p => p.IsAvailable()).ToList();
 
-            //prepare model
-            (await _productViewModelService.PrepareProductOverviewModels(products, prepareSpecificationAttributes: true))
-                .ToList()
-                .ForEach(model.Products.Add);
+            (await _mediator.Send(new GetProductOverview() {
+                PrepareSpecificationAttributes = true,
+                Products = products,
+            })).ToList().ForEach(model.Products.Add);
+
             return View(model);
+
         }
 
         public virtual IActionResult ClearCompareList()

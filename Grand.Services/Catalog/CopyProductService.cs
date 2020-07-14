@@ -1,6 +1,6 @@
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Media;
-using Grand.Core.Domain.Seo;
+using Grand.Domain.Catalog;
+using Grand.Domain.Media;
+using Grand.Domain.Seo;
 using Grand.Services.Localization;
 using Grand.Services.Media;
 using Grand.Services.Seo;
@@ -207,7 +207,7 @@ namespace Grand.Services.Catalog
                 CreatedOnUtc = DateTime.UtcNow,
                 UpdatedOnUtc = DateTime.UtcNow,
                 Locales = product.Locales,
-                CustomerRoles = product.CustomerRoles,
+                CustomerRoles = product.CustomerRoles,                
                 Stores = product.Stores
             };
 

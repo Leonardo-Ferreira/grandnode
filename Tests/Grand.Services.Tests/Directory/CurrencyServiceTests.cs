@@ -1,6 +1,7 @@
-﻿using Grand.Core.Caching;
-using Grand.Core.Data;
-using Grand.Core.Domain.Directory;
+﻿using Grand.Core;
+using Grand.Core.Caching;
+using Grand.Domain.Data;
+using Grand.Domain.Directory;
 using Grand.Core.Plugins;
 using Grand.Core.Tests.Caching;
 using Grand.Services.Events;
@@ -31,6 +32,8 @@ namespace Grand.Services.Directory.Tests
         public void TestInitialize() {
             //plugin initialization
             new Grand.Services.Tests.ServiceTest().PluginInitializator();
+            
+            CommonHelper.CacheTimeMinutes = 10;
 
             currencyUSD = new Currency {
                 Id = "1",
@@ -85,21 +88,21 @@ namespace Grand.Services.Directory.Tests
                 tempCurrencyRepository.Setup(x => x.GetByIdAsync(currencyRUR.Id)).ReturnsAsync(currencyRUR);
                 _currencyRepository = tempCurrencyRepository.Object;
             }
+            var tempEventPublisher = new Mock<IMediator>();
+            {
+                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
+                _eventPublisher = tempEventPublisher.Object;
+            }
 
             _storeMappingService = new Mock<IStoreMappingService>().Object;
-            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object);
+            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object, _eventPublisher);
             _serviceProvider = new Mock<IServiceProvider>().Object;
 
             _currencySettings = new CurrencySettings();
             _currencySettings.PrimaryStoreCurrencyId = currencyUSD.Id;
             _currencySettings.PrimaryExchangeRateCurrencyId = currencyEUR.Id;
 
-            var tempEventPublisher = new Mock<IMediator>();
-            {
-                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
-                _eventPublisher = tempEventPublisher.Object;
-            }
-            
+           
             _currencyService = new CurrencyService(
                 cacheManager, _currencyRepository, _storeMappingService,
                 _currencySettings, new PluginFinder(_serviceProvider), _eventPublisher);

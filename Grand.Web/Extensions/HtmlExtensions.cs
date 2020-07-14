@@ -1,12 +1,9 @@
 ﻿using Grand.Core;
-using Grand.Core.Caching;
-using Grand.Core.Infrastructure;
 using Grand.Framework;
 using Grand.Framework.UI.Paging;
 using Grand.Services.Localization;
 using Grand.Services.Seo;
 using Grand.Services.Topics;
-using Grand.Web.Infrastructure.Cache;
 using Grand.Web.Models.Boards;
 using Grand.Web.Models.Common;
 using Microsoft.AspNetCore.Html;
@@ -232,21 +229,14 @@ namespace Grand.Web.Extensions
         ///// <returns>Topic SEO Name</returns>
         public static async Task<string> GetTopicSeName<T>(this IHtmlHelper<T> html, string systemName, HttpContext httpContext)
         {
-            var workContext = httpContext.RequestServices.GetRequiredService<IWorkContext>();
             var storeContext = httpContext.RequestServices.GetRequiredService<IStoreContext>();
+            var topicService = httpContext.RequestServices.GetRequiredService<ITopicService>();
+            var topic = await topicService.GetTopicBySystemName(systemName, storeContext.CurrentStore.Id);
+            if (topic == null)
+                return "";
 
-            //static cache manager
-            var cacheManager = httpContext.RequestServices.GetRequiredService<ICacheManager>();
-            var cacheKey = string.Format(ModelCacheEventConsumer.TOPIC_SENAME_BY_SYSTEMNAME, systemName, workContext.WorkingLanguage.Id, storeContext.CurrentStore.Id);
-            var cachedSeName = await cacheManager.GetAsync(cacheKey, async () =>
-            {
-                var topicService = httpContext.RequestServices.GetRequiredService<ITopicService>();
-                var topic = await topicService.GetTopicBySystemName(systemName, storeContext.CurrentStore.Id);
-                if (topic == null)
-                    return "";
-                return topic.GetSeName(workContext.WorkingLanguage.Id);
-            });
-            return cachedSeName;
+            var workContext = httpContext.RequestServices.GetRequiredService<IWorkContext>();
+            return topic.GetSeName(workContext.WorkingLanguage.Id);
         }
 
     }

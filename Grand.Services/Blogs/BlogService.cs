@@ -1,7 +1,7 @@
-using Grand.Core;
-using Grand.Core.Data;
-using Grand.Core.Domain.Blogs;
-using Grand.Core.Domain.Catalog;
+using Grand.Domain;
+using Grand.Domain.Data;
+using Grand.Domain.Blogs;
+using Grand.Domain.Catalog;
 using Grand.Services.Events;
 using MediatR;
 using MongoDB.Driver;
@@ -253,11 +253,11 @@ namespace Grand.Services.Blogs
         /// </summary>
         /// <param name="customerId">Customer identifier; "" to load all records</param>
         /// <returns>Comments</returns>
-        public virtual async Task<IList<BlogComment>> GetAllComments(string customerId)
+        public virtual async Task<IList<BlogComment>> GetAllComments(string customerId, string storeId)
         {
             var query = from c in _blogCommentRepository.Table
                         orderby c.CreatedOnUtc
-                        where (customerId == "" || c.CustomerId == customerId)
+                        where (customerId == "" || c.CustomerId == customerId) && (storeId == "" || c.StoreId == storeId)
                         select c;        
             
             return await query.ToListAsync();
@@ -325,6 +325,19 @@ namespace Grand.Services.Blogs
         public virtual Task<BlogCategory> GetBlogCategoryById(string blogCategoryId)
         {
             return _blogCategoryRepository.GetByIdAsync(blogCategoryId);
+        }
+
+        /// <summary>
+        /// Get category by sename
+        /// </summary>
+        /// <param name="blogCategorySeName">Blog category sename</param>
+        /// <returns></returns>
+        public virtual async Task<BlogCategory> GetBlogCategoryBySeName(string blogCategorySeName)
+        {
+            if (string.IsNullOrEmpty(blogCategorySeName))
+                throw new ArgumentNullException("blogCategorySeName");
+
+            return await _blogCategoryRepository.Table.Where(x => x.SeName == blogCategorySeName.ToLowerInvariant()).FirstOrDefaultAsync();
         }
 
         /// <summary>

@@ -1,7 +1,7 @@
 ﻿using Grand.Core.Caching;
-using Grand.Core.Data;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Messages;
+using Grand.Domain.Data;
+using Grand.Domain.Catalog;
+using Grand.Domain.Messages;
 using Grand.Services.Events;
 using Grand.Services.Localization;
 using Grand.Services.Stores;
@@ -89,7 +89,7 @@ namespace Grand.Services.Messages
 
             await _messageTemplateRepository.DeleteAsync(messageTemplate);
 
-            await _cacheManager.RemoveByPattern(MESSAGETEMPLATES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(MESSAGETEMPLATES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityDeleted(messageTemplate);
@@ -106,7 +106,7 @@ namespace Grand.Services.Messages
 
             await _messageTemplateRepository.InsertAsync(messageTemplate);
 
-            await _cacheManager.RemoveByPattern(MESSAGETEMPLATES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(MESSAGETEMPLATES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityInserted(messageTemplate);
@@ -123,7 +123,7 @@ namespace Grand.Services.Messages
 
             await _messageTemplateRepository.UpdateAsync(messageTemplate);
 
-            await _cacheManager.RemoveByPattern(MESSAGETEMPLATES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(MESSAGETEMPLATES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityUpdated(messageTemplate);

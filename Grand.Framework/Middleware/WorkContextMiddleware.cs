@@ -11,7 +11,7 @@ namespace Grand.Framework.Middleware
         #region Fields
 
         private readonly RequestDelegate _next;
-        //private readonly IStoreContext _storeContext;
+
         #endregion
 
         #region Ctor
@@ -34,8 +34,14 @@ namespace Grand.Framework.Middleware
         /// </summary>
         /// <param name="context">HTTP context</param>
         /// <returns>Task</returns>
-        public async Task InvokeAsync(HttpContext context, IWorkContext workContext)
+        public async Task Invoke(HttpContext context, IWorkContext workContext)
         {
+            if (context == null || context.Request == null)
+            {
+                await _next(context);
+                return;
+            }
+
             //set current customer
             var customer = await workContext.SetCurrentCustomer();
             var vendor = await workContext.SetCurrentVendor(customer);
@@ -60,7 +66,6 @@ namespace Grand.Framework.Middleware
                     CultureInfo.CurrentUICulture = culture;
                 }
             }
-
             //call the next middleware in the request pipeline
             await _next(context);
         }

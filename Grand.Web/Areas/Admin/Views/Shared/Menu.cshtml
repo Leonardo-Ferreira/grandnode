@@ -8,7 +8,7 @@
 @{
     //load sitemap
     var siteMap = new XmlSiteMap(localizationService, permissionService);
-    await siteMap.LoadFrom("~/Areas/Admin/sitemap.config");
+    await siteMap.LoadFrom("~/App_Data/sitemap.config");
 }
 
 <div class="col-md-3 left_col">
@@ -28,7 +28,7 @@
                         var adminMenuPlugins = pluginFinder.GetPlugins<IAdminMenuPlugin>().ToList();
                         foreach (var adminMenuPlugin in adminMenuPlugins)
                         {
-                            adminMenuPlugin.ManageSiteMap(rootNode);
+                            await adminMenuPlugin.ManageSiteMap(rootNode);
                         }
                         //"Plugins" menu item should be visible when it has some child nodes
                         var pluginNode = rootNode.ChildNodes.FirstOrDefault(x => x.SystemName == "Third party plugins");

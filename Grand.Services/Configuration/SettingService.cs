@@ -1,10 +1,9 @@
 using Grand.Core;
 using Grand.Core.Caching;
-using Grand.Core.Configuration;
-using Grand.Core.Data;
-using Grand.Core.Domain.Configuration;
+using Grand.Domain.Configuration;
+using Grand.Domain.Data;
+using Grand.Services.Commands.Models.Common;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System;
@@ -40,7 +39,6 @@ namespace Grand.Services.Configuration
         private readonly IRepository<Setting> _settingRepository;
         private readonly IMediator _mediator;
         private readonly ICacheManager _cacheManager;
-        private readonly IServiceProvider _serviceProvider;
 
         private IDictionary<string, IList<SettingForCaching>> _allSettings = null;
 
@@ -54,13 +52,12 @@ namespace Grand.Services.Configuration
         /// <param name="cacheManager">Cache manager</param>
         /// <param name="mediator">Mediator</param>
         /// <param name="settingRepository">Setting repository</param>
-        public SettingService(IEnumerable<ICacheManager> cacheManager, IMediator mediator,
-            IRepository<Setting> settingRepository, IServiceProvider serviceProvider)
+        public SettingService(ICacheManager cacheManager, IMediator mediator,
+            IRepository<Setting> settingRepository)
         {
-            _cacheManager = cacheManager.First(o => o.GetType() == typeof(MemoryCacheManager));
+            _cacheManager = cacheManager;
             _mediator = mediator;
             _settingRepository = settingRepository;
-            _serviceProvider = serviceProvider;
         }
 
         #endregion
@@ -147,7 +144,7 @@ namespace Grand.Services.Configuration
 
             //cache
             if (clearCache)
-                await _cacheManager.RemoveByPattern(SETTINGS_PATTERN_KEY);
+                await _cacheManager.RemoveByPrefix(SETTINGS_PATTERN_KEY);
 
         }
 
@@ -165,7 +162,7 @@ namespace Grand.Services.Configuration
 
             //cache
             if (clearCache)
-                await _cacheManager.RemoveByPattern(SETTINGS_PATTERN_KEY);
+                await _cacheManager.RemoveByPrefix(SETTINGS_PATTERN_KEY);
 
         }
 
@@ -181,7 +178,7 @@ namespace Grand.Services.Configuration
             await _settingRepository.DeleteAsync(setting);
 
             //cache
-            await _cacheManager.RemoveByPattern(SETTINGS_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(SETTINGS_PATTERN_KEY);
 
         }
 
@@ -377,7 +374,7 @@ namespace Grand.Services.Configuration
                 catch (Exception ex)
                 {
                     var msg = $"Could not convert setting {key} to type {prop.PropertyType.FullName}";
-                    _serviceProvider.GetRequiredService<Logging.ILogger>().InsertLog(Core.Domain.Logging.LogLevel.Error, msg, ex.Message);
+                    _mediator.Send(new InsertLogCommand() { LogLevel = Domain.Logging.LogLevel.Error, ShortMessage = msg, FullMessage = ex.Message });
                 }
             }
 
@@ -500,7 +497,7 @@ namespace Grand.Services.Configuration
         /// </summary>
         public virtual async Task ClearCache()
         {
-            await _cacheManager.RemoveByPattern(SETTINGS_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(SETTINGS_PATTERN_KEY);
         }
 
         #endregion

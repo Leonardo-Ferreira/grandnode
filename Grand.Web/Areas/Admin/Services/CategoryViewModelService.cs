@@ -1,6 +1,6 @@
-﻿using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Discounts;
-using Grand.Core.Domain.Seo;
+﻿using Grand.Domain.Catalog;
+using Grand.Domain.Discounts;
+using Grand.Domain.Seo;
 using Grand.Framework.Extensions;
 using Grand.Services.Catalog;
 using Grand.Services.Customers;
@@ -78,7 +78,7 @@ namespace Grand.Web.Areas.Admin.Services
             foreach (var c in categories)
             {
                 model.AvailableCategories.Add(new SelectListItem {
-                    Text = c.GetFormattedBreadCrumb(categories),
+                    Text = _categoryService.GetFormattedBreadCrumb(c, categories),
                     Value = c.Id.ToString()
                 });
             }
@@ -146,12 +146,12 @@ namespace Grand.Web.Areas.Admin.Services
             var model = new CategoryListModel();
             model.AvailableStores.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = "" });
             foreach (var s in (await _storeService.GetAllStores()).Where(x => x.Id == storeId || string.IsNullOrWhiteSpace(storeId)))
-                model.AvailableStores.Add(new SelectListItem { Text = s.Name, Value = s.Id.ToString() });
+                model.AvailableStores.Add(new SelectListItem { Text = s.Shortcut, Value = s.Id.ToString() });
             return model;
         }
         public virtual async Task<List<TreeNode>> PrepareCategoryNodeListModel(string storeId)
         {
-            var categories = await _categoryService.GetAllCategories(storeId: storeId);
+            var categories = await _categoryService.GetAllCategories(storeId: storeId, showHidden: true);
             var nodeList = new List<TreeNode>();
             var list = new List<ITreeNode>();
             list.AddRange(categories);
@@ -180,7 +180,7 @@ namespace Grand.Web.Areas.Admin.Services
             foreach (var x in categories)
             {
                 var categoryModel = x.ToModel();
-                categoryModel.Breadcrumb = await x.GetFormattedBreadCrumb(_categoryService);
+                categoryModel.Breadcrumb = await _categoryService.GetFormattedBreadCrumb(x);
                 categoryListModel.Add(categoryModel);
             }
             return (categoryListModel, categories.TotalCount);
@@ -360,7 +360,7 @@ namespace Grand.Web.Areas.Admin.Services
             model.AvailableCategories.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = " " });
             var categories = await _categoryService.GetAllCategories(showHidden: true, storeId: storeId);
             foreach (var c in categories)
-                model.AvailableCategories.Add(new SelectListItem { Text = c.GetFormattedBreadCrumb(categories), Value = c.Id.ToString() });
+                model.AvailableCategories.Add(new SelectListItem { Text = _categoryService.GetFormattedBreadCrumb(c, categories), Value = c.Id.ToString() });
 
             //manufacturers
             model.AvailableManufacturers.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = " " });
@@ -370,7 +370,7 @@ namespace Grand.Web.Areas.Admin.Services
             //stores
             model.AvailableStores.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = " " });
             foreach (var s in (await _storeService.GetAllStores()).Where(x => x.Id == storeId || string.IsNullOrWhiteSpace(storeId)))
-                model.AvailableStores.Add(new SelectListItem { Text = s.Name, Value = s.Id.ToString() });
+                model.AvailableStores.Add(new SelectListItem { Text = s.Shortcut, Value = s.Id.ToString() });
 
             //vendors
             model.AvailableVendors.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = " " });

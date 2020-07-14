@@ -1,8 +1,8 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Forums;
-using Grand.Core.Domain.Tax;
+using Grand.Domain.Catalog;
+using Grand.Domain.Customers;
+using Grand.Domain.Forums;
+using Grand.Domain.Tax;
 using Grand.Framework.Controllers;
 using Grand.Framework.Kendoui;
 using Grand.Framework.Mvc;
@@ -37,6 +37,7 @@ namespace Grand.Web.Areas.Admin.Controllers
 
         private readonly ICustomerService _customerService;
         private readonly IProductService _productService;
+        private readonly IProductReviewService _productReviewService;
         private readonly IProductReviewViewModelService _productReviewViewModelService;
         private readonly IProductViewModelService _productViewModelService;
         private readonly ICustomerViewModelService _customerViewModelService;
@@ -45,6 +46,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         private readonly ILocalizationService _localizationService;
         private readonly CustomerSettings _customerSettings;
         private readonly IWorkContext _workContext;
+        private readonly IStoreContext _storeContext;
         private readonly IExportManager _exportManager;
         private readonly ICustomerAttributeParser _customerAttributeParser;
         private readonly ICustomerAttributeService _customerAttributeService;
@@ -59,6 +61,7 @@ namespace Grand.Web.Areas.Admin.Controllers
 
         public CustomerController(ICustomerService customerService,
             IProductService productService,
+            IProductReviewService productReviewService,
             IProductReviewViewModelService productReviewViewModelService,
             IProductViewModelService productViewModelService,
             ICustomerViewModelService customerViewModelService,
@@ -67,6 +70,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             ILocalizationService localizationService,
             CustomerSettings customerSettings,
             IWorkContext workContext,
+            IStoreContext storeContext,
             IExportManager exportManager,
             ICustomerAttributeParser customerAttributeParser,
             ICustomerAttributeService customerAttributeService,
@@ -77,6 +81,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         {
             _customerService = customerService;
             _productService = productService;
+            _productReviewService = productReviewService;
             _productReviewViewModelService = productReviewViewModelService;
             _productViewModelService = productViewModelService;
             _customerViewModelService = customerViewModelService;
@@ -85,6 +90,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             _localizationService = localizationService;
             _customerSettings = customerSettings;
             _workContext = workContext;
+            _storeContext = storeContext;
             _exportManager = exportManager;
             _customerAttributeParser = customerAttributeParser;
             _customerAttributeService = customerAttributeService;
@@ -434,6 +440,11 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (customer == null)
                 //No customer found with the specified id
                 return RedirectToAction("List");
+            if (customer.Id == _workContext.CurrentCustomer.Id)
+            {
+                ErrorNotification(_localizationService.GetResource("Admin.Customers.Customers.NoSelfDelete"));
+                return RedirectToAction("List");
+            }
 
             try
             {
@@ -451,6 +462,16 @@ namespace Grand.Web.Areas.Admin.Controllers
                 ErrorNotification(exc.Message);
                 return RedirectToAction("Edit", new { id = customer.Id });
             }
+        }
+
+        public async Task<IActionResult> DeleteSelected(ICollection<string> selectedIds)
+        {
+            if (selectedIds != null)
+            {
+                await _customerViewModelService.DeleteSelected(selectedIds.ToList());
+            }
+
+            return Json(new { Result = true });
         }
 
         [HttpPost, ActionName("Edit")]
@@ -485,7 +506,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 //No customer found with the specified id
                 return RedirectToAction("List");
 
-            await _workflowMessageService.SendCustomerWelcomeMessage(customer, _workContext.WorkingLanguage.Id);
+            await _workflowMessageService.SendCustomerWelcomeMessage(customer, _storeContext.CurrentStore, _workContext.WorkingLanguage.Id);
 
             SuccessNotification(_localizationService.GetResource("Admin.Customers.Customers.SendWelcomeMessage.Success"));
 
@@ -503,7 +524,7 @@ namespace Grand.Web.Areas.Admin.Controllers
 
             //email validation message
             await _genericAttributeService.SaveAttribute(customer, SystemCustomerAttributeNames.AccountActivationToken, Guid.NewGuid().ToString());
-            await _workflowMessageService.SendCustomerEmailValidationMessage(customer, _workContext.WorkingLanguage.Id);
+            await _workflowMessageService.SendCustomerEmailValidationMessage(customer, _storeContext.CurrentStore, _workContext.WorkingLanguage.Id);
 
             SuccessNotification(_localizationService.GetResource("Admin.Customers.Customers.ReSendActivationMessage.Success"));
 
@@ -758,7 +779,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         [HttpPost]
         public async Task<IActionResult> ReviewList(string customerId, DataSourceRequest command)
         {
-            var productReviews = await _productService.GetAllProductReviews(customerId, null,
+            var productReviews = await _productReviewService.GetAllProductReviews(customerId, null,
                 null, null, "", null, "", command.Page - 1, command.PageSize);
             var items = new List<ProductReviewModel>();
             foreach (var x in productReviews)
@@ -778,7 +799,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         [HttpPost]
         public async Task<IActionResult> ReviewDelete(string id)
         {
-            var productReview = await _productService.GetProductReviewById(id);
+            var productReview = await _productReviewService.GetProductReviewById(id);
             if (productReview == null)
                 throw new ArgumentException("No review found with the specified id", "id");
 

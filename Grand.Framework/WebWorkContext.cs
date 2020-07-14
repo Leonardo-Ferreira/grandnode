@@ -1,9 +1,10 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Directory;
-using Grand.Core.Domain.Localization;
-using Grand.Core.Domain.Tax;
-using Grand.Core.Domain.Vendors;
+using Grand.Core.Configuration;
+using Grand.Domain.Customers;
+using Grand.Domain.Directory;
+using Grand.Domain.Localization;
+using Grand.Domain.Tax;
+using Grand.Domain.Vendors;
 using Grand.Services.Authentication;
 using Grand.Services.Common;
 using Grand.Services.Customers;
@@ -47,6 +48,7 @@ namespace Grand.Framework
 
         private readonly LocalizationSettings _localizationSettings;
         private readonly TaxSettings _taxSettings;
+        private readonly GrandConfig _config;
 
         private Customer _cachedCustomer;
         private Customer _originalCustomerIfImpersonated;
@@ -70,7 +72,8 @@ namespace Grand.Framework
             IStoreMappingService storeMappingService,
             IVendorService vendorService,
             LocalizationSettings localizationSettings,
-            TaxSettings taxSettings)
+            TaxSettings taxSettings,
+            GrandConfig config)
         {
             _httpContextAccessor = httpContextAccessor;
             _authenticationService = authenticationService;
@@ -84,6 +87,7 @@ namespace Grand.Framework
             _vendorService = vendorService;
             _localizationSettings = localizationSettings;
             _taxSettings = taxSettings;
+            _config = config;
         }
 
         #endregion
@@ -115,12 +119,11 @@ namespace Grand.Framework
             _httpContextAccessor.HttpContext.Response.Cookies.Delete(CUSTOMER_COOKIE_NAME);
 
             //get date of cookie expiration
-            var cookieExpires = 24 * 365; //TODO make configurable
-            var cookieExpiresDate = DateTime.Now.AddHours(cookieExpires);
+            var cookieExpiresDate = DateTime.UtcNow.AddHours(CommonHelper.CookieAuthExpires);
 
             //if passed guid is empty set cookie as expired
             if (customerGuid == Guid.Empty)
-                cookieExpiresDate = DateTime.Now.AddMonths(-1);
+                cookieExpiresDate = DateTime.UtcNow.AddMonths(-1);
 
             //set new cookie value
             var options = new CookieOptions {
@@ -268,7 +271,7 @@ namespace Grand.Framework
 
             if (customer == null || customer.Deleted || !customer.Active)
             {
-                var crawler = _httpContextAccessor?.HttpContext?.Request.Crawler();
+                var crawler = _httpContextAccessor.HttpContext.Request?.Crawler();
                 //check whether request is made by a search engine, in this case return built-in customer record for search engines
                 if (crawler != null)
                     customer = await _customerService.GetCustomerBySystemName(SystemCustomerNames.SearchEngine);
@@ -289,6 +292,7 @@ namespace Grand.Framework
             //cache the found customer
             return _cachedCustomer = customer ?? throw new Exception("No customer could be loaded");
         }
+
 
         /// <summary>
         /// Gets the original customer (in case the current one is impersonated)
@@ -352,7 +356,7 @@ namespace Grand.Framework
             var allStoreLanguages = await _languageService.GetAllLanguages();
 
             //localized URLs are enabled, so try to get language from the requested page URL
-            if (_localizationSettings.SeoFriendlyUrlsForLanguagesEnabled)
+            if (_config.SeoFriendlyUrlsForLanguagesEnabled)
                 detectedLanguage = await GetLanguageFromUrl(allStoreLanguages);
 
             //whether we should detect the language from the request

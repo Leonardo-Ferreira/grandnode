@@ -2,19 +2,17 @@
 using Grand.Core;
 using Grand.Core.Configuration;
 using Grand.Core.Data;
-using Grand.Core.Domain;
 using Grand.Core.Infrastructure;
 using Grand.Core.Plugins;
+using Grand.Framework.Extensions;
 using Grand.Framework.Mvc.ModelBinding;
 using Grand.Framework.Mvc.Routing;
-using Grand.Framework.Security.Authorization;
 using Grand.Framework.Themes;
 using Grand.Services.Authentication;
 using Grand.Services.Authentication.External;
 using Grand.Services.Configuration;
 using Grand.Services.Security;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -36,6 +34,7 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using WebMarkupMin.AspNet.Common.UrlMatchers;
 using WebMarkupMin.AspNetCore3;
+using Grand.Domain.Configuration;
 
 namespace Grand.Framework.Infrastructure.Extensions
 {
@@ -67,12 +66,6 @@ namespace Grand.Framework.Infrastructure.Extensions
             engine.Initialize(services, configuration);
             engine.ConfigureServices(services, configuration);
 
-            //if (DataSettingsHelper.DatabaseIsInstalled())
-            //{
-            //    //log application start
-            //    var logger = serviceProvider.GetRequiredService<ILogger>();
-            //    logger.Information("Application started", null, null);
-            //}
         }
 
         /// <summary>
@@ -238,8 +231,6 @@ namespace Grand.Framework.Infrastructure.Extensions
             foreach (var instance in externalAuthInstances)
                 instance.Configure(authenticationBuilder, configuration);
 
-            services.AddSingleton<IAuthorizationPolicyProvider, PermisionPolicyProvider>();
-            services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
         }
 
         /// <summary>
@@ -252,8 +243,10 @@ namespace Grand.Framework.Infrastructure.Extensions
             //add basic MVC feature
             var mvcBuilder = services.AddMvc(options =>
             {
-                // https://blogs.msdn.microsoft.com/webdev/2018/08/27/asp-net-core-2-2-0-preview1-endpoint-routing/
-                options.EnableEndpointRouting = false;
+                //add custom display metadata provider
+                options.ModelMetadataDetailsProviders.Add(new GrandMetadataProvider());
+                //for API - ignore for PWA
+                options.Conventions.Add(new ApiExplorerIgnores());
             });
 
             mvcBuilder.AddRazorRuntimeCompilation();
@@ -290,9 +283,6 @@ namespace Grand.Framework.Infrastructure.Extensions
             //MVC now serializes JSON with camel case names by default, use this code to avoid it
             mvcBuilder.AddNewtonsoftJson(options => options.SerializerSettings.ContractResolver = new DefaultContractResolver());
 
-            //add custom display metadata provider
-            mvcBuilder.AddMvcOptions(options => options.ModelMetadataDetailsProviders.Add(new GrandMetadataProvider()));
-
             //add fluent validation
             mvcBuilder.AddFluentValidation(configuration =>
             {
@@ -305,7 +295,6 @@ namespace Grand.Framework.Infrastructure.Extensions
                 //implicit/automatic validation of child properties
                 configuration.ImplicitlyValidateChildProperties = true;
             });
-            //mvcBuilder.AddFluentValidation(configuration => configuration.RegisterValidatorsFromAssemblyContaining(typeof(GrandValidatorFactory)));
 
             //register controllers as services, it'll allow to override them
             mvcBuilder.AddControllersAsServices();
@@ -332,7 +321,7 @@ namespace Grand.Framework.Infrastructure.Extensions
                 options.IgnoredPaths.Add("/.well-known/acme-challenge");
                 //determine who can access the MiniProfiler results
                 options.ResultsAuthorize = request =>
-                    !request.HttpContext.RequestServices.GetRequiredService<StoreInformationSettings>().DisplayMiniProfilerInPublicStore ||
+                    !request.HttpContext.RequestServices.GetRequiredService<GrandConfig>().DisplayMiniProfilerInPublicStore ||
                     request.HttpContext.RequestServices.GetRequiredService<IPermissionService>().Authorize(StandardPermissionProvider.AccessAdminPanel).Result;
             });
         }

@@ -9,7 +9,7 @@ namespace Grand.Framework.Middleware
         #region Fields
 
         private readonly RequestDelegate _next;
-        //private readonly IStoreContext _storeContext;
+
         #endregion
 
         #region Ctor
@@ -32,8 +32,11 @@ namespace Grand.Framework.Middleware
         /// </summary>
         /// <param name="context">HTTP context</param>
         /// <returns>Task</returns>
-        public async Task InvokeAsync(HttpContext context, IStoreContext storeContext)
+        public async Task Invoke(HttpContext context, IStoreContext storeContext)
         {
+            if (context == null || context.Request == null)
+                return;
+
             await storeContext.SetCurrentStore();
 
             //call the next middleware in the request pipeline

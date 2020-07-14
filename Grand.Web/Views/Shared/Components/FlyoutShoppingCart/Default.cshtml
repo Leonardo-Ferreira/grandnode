@@ -1,4 +1,7 @@
 ﻿@model MiniShoppingCartModel
+
+@await Component.InvokeAsync("Widget", new { widgetZone = "flyout_shopping_cart_before_content", additionalData = Model })
+
 <aside class="js-offcanvas flycart-container" data-offcanvas-options='{"modifiers":"right,overlay","modal":true,"resize":false}' id="right">
     <div class="flyout-cart">
         <div class="flyout-cart-header">
@@ -79,7 +82,7 @@
                                     {
                                         checkoutUrl = Url.RouteUrl("Checkout");
                                     }
-                                    <input type="button" value="@T("Checkout.Button")" class="btn btn-secondary btn-block checkout-button" onclick="setLocation('@checkoutUrl')" />
+                                    <input type="button" value="@T("Checkout.Button")" class="btn btn-info btn-block checkout-button ml-1 mt-1" onclick="setLocation('@checkoutUrl')" />
                                 }
                             </div>
                         </div>

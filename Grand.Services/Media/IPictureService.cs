@@ -1,5 +1,5 @@
-using Grand.Core;
-using Grand.Core.Domain.Media;
+using Grand.Domain;
+using Grand.Domain.Media;
 using System.Threading.Tasks;
 
 namespace Grand.Services.Media
@@ -153,6 +153,13 @@ namespace Grand.Services.Media
             bool isNew = true, bool validateBinary = true);
 
         /// <summary>
+        /// Updates the picture
+        /// </summary>
+        /// <param name="picture">Picture</param>
+        /// <returns>Picture</returns>
+        Task<Picture> UpdatePicture(Picture picture);
+
+        /// <summary>
         /// Updates a SEO filename of a picture
         /// </summary>
         /// <param name="pictureId">The picture identifier</param>
@@ -166,11 +173,7 @@ namespace Grand.Services.Media
         /// <param name="pictureBinary">Picture binary</param>
         /// <param name="mimeType">MIME type</param>
         /// <returns>Picture binary or throws an exception</returns>
-        Task<byte[]> ValidatePicture(byte[] pictureBinary, string mimeType);
+        byte[] ValidatePicture(byte[] pictureBinary, string mimeType);
 
-        /// <summary>
-        /// Gets a value indicating whether the images should be stored in data base.
-        /// </summary>
-        bool StoreInDb { get; }
     }
 }

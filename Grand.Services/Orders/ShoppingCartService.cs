@@ -1,14 +1,15 @@
 using Grand.Core;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Orders;
+using Grand.Domain.Catalog;
+using Grand.Domain.Customers;
+using Grand.Domain.Orders;
 using Grand.Services.Catalog;
 using Grand.Services.Common;
 using Grand.Services.Customers;
 using Grand.Services.Directory;
 using Grand.Services.Events;
-using Grand.Services.Events.Web;
+using Grand.Services.Events.Extensions;
 using Grand.Services.Localization;
+using Grand.Services.Notifications.ShoppingCart;
 using Grand.Services.Security;
 using Grand.Services.Shipping;
 using Grand.Services.Stores;
@@ -37,43 +38,19 @@ namespace Grand.Services.Orders
         private readonly ICheckoutAttributeParser _checkoutAttributeParser;
         private readonly IPriceFormatter _priceFormatter;
         private readonly ICustomerService _customerService;
-        private readonly ShoppingCartSettings _shoppingCartSettings;
         private readonly IMediator _mediator;
         private readonly IPermissionService _permissionService;
         private readonly IAclService _aclService;
         private readonly IStoreMappingService _storeMappingService;
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly IProductAttributeService _productAttributeService;
-        private readonly ICustomerActionEventService _customerActionEventService;
         private readonly IProductReservationService _productReservationService;
         private readonly IShippingService _shippingService;
+        private readonly ShoppingCartSettings _shoppingCartSettings;
         #endregion
 
         #region Ctor
 
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="workContext">Work context</param>
-        /// <param name="storeContext">Store context</param>
-        /// <param name="currencyService">Currency service</param>
-        /// <param name="productService">Product settings</param>
-        /// <param name="localizationService">Localization service</param>
-        /// <param name="productAttributeParser">Product attribute parser</param>
-        /// <param name="checkoutAttributeService">Checkout attribute service</param>
-        /// <param name="checkoutAttributeParser">Checkout attribute parser</param>
-        /// <param name="priceFormatter">Price formatter</param>
-        /// <param name="customerService">Customer service</param>
-        /// <param name="mediator">Mediator service</param>
-        /// <param name="permissionService">Permission service</param>
-        /// <param name="aclService">ACL service</param>
-        /// <param name="storeMappingService">Store mapping service</param>
-        /// <param name="genericAttributeService">Generic attribute service</param>
-        /// <param name="productAttributeService">Product attribute service</param>
-        /// <param name="customerActionEventService">Customer action event service</param>
-        /// <param name="productReservationService">Product reservation service</param>
-        /// <param name="shippingService">Shipping service</param>
-        /// <param name="shoppingCartSettings">Shopping cart settings</param>
         public ShoppingCartService(
             IWorkContext workContext,
             IStoreContext storeContext,
@@ -112,7 +89,6 @@ namespace Grand.Services.Orders
             _storeMappingService = storeMappingService;
             _genericAttributeService = genericAttributeService;
             _productAttributeService = productAttributeService;
-            _customerActionEventService = customerActionEventService;
             _productReservationService = productReservationService;
             _shippingService = shippingService;
             _shoppingCartSettings = shoppingCartSettings;
@@ -361,8 +337,7 @@ namespace Grand.Services.Orders
                 warnings.Add(_localizationService.GetResource("ShoppingCart.RequiredWarehouse"));
             }
 
-            var warehouseId = !string.IsNullOrEmpty(shoppingCartItem.WarehouseId) ? shoppingCartItem.WarehouseId : _storeContext.CurrentStore.DefaultWarehouseId;
-                            //_shoppingCartSettings.AllowToSelectWarehouse ? shoppingCartItem.WarehouseId : _storeContext.CurrentStore.DefaultWarehouseId;
+            var warehouseId = !string.IsNullOrEmpty(shoppingCartItem.WarehouseId) ? shoppingCartItem.WarehouseId : _storeContext.CurrentStore?.DefaultWarehouseId;
 
             if (!string.IsNullOrEmpty(warehouseId))
             {
@@ -406,10 +381,43 @@ namespace Grand.Services.Orders
                                 {
                                     if (p1.BackorderMode == BackorderMode.NoBackorders)
                                     {
-                                        int maximumQuantityCanBeAdded = p1.GetTotalStockQuantity(warehouseId: warehouseId);
-                                        if (maximumQuantityCanBeAdded < _qty)
+                                        if (p1.ManageInventoryMethod == ManageInventoryMethod.ManageStock)
                                         {
-                                            warnings.Add(string.Format(_localizationService.GetResource("ShoppingCart.OutOfStock.BundleProduct"), p1.Name));
+                                            int maximumQuantityCanBeAdded = p1.GetTotalStockQuantity(warehouseId: warehouseId);
+                                            if (maximumQuantityCanBeAdded < _qty)
+                                            {
+                                                warnings.Add(string.Format(_localizationService.GetResource("ShoppingCart.OutOfStock.BundleProduct"), p1.Name));
+                                            }
+                                        }
+                                        if (p1.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
+                                        {
+                                            var combination = _productAttributeParser.FindProductAttributeCombination(p1, shoppingCartItem.AttributesXml);
+                                            if (combination != null)
+                                            {
+                                                //combination exists
+                                                //let's check stock level
+                                                var stockquantity = p1.GetTotalStockQuantityForCombination(combination, warehouseId: warehouseId);
+                                                if (!combination.AllowOutOfStockOrders && stockquantity < _qty)
+                                                {
+                                                    int maximumQuantityCanBeAdded = stockquantity;
+                                                    if (maximumQuantityCanBeAdded <= 0)
+                                                    {
+                                                        warnings.Add(string.Format(_localizationService.GetResource("ShoppingCart.OutOfStock.BundleProduct"), p1.Name));
+                                                    }
+                                                    else
+                                                    {
+                                                        warnings.Add(string.Format(_localizationService.GetResource("ShoppingCart.QuantityExceedsStock.BundleProduct"), p1.Name, maximumQuantityCanBeAdded));
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                //combination doesn't exist
+                                                if (p1.AllowAddingOnlyExistingAttributeCombinations)
+                                                {
+                                                    warnings.Add(string.Format(_localizationService.GetResource("ShoppingCart.Combination.BundleProduct.NotExist"), p1.Name));
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -518,21 +526,28 @@ namespace Grand.Services.Orders
             var warnings = new List<string>();
 
             //ensure it's our attributes
-            var attributes1 = _productAttributeParser.ParseProductAttributeMappings(product, attributesXml);
+            var attributes1 = _productAttributeParser.ParseProductAttributeMappings(product, attributesXml).ToList();
+            if (product.ProductType == ProductType.BundledProduct)
+            {
+                foreach (var bundle in product.BundleProducts)
+                {
+                    var p1 = await _productService.GetProductById(bundle.ProductId);
+                    if (p1 != null)
+                    {
+                        var a1 = _productAttributeParser.ParseProductAttributeMappings(p1, attributesXml).ToList();
+                        attributes1.AddRange(a1);
+                    }
+                }
+
+            }
             if (ignoreNonCombinableAttributes)
             {
                 attributes1 = attributes1.Where(x => !x.IsNonCombinable()).ToList();
+
             }
             foreach (var attribute in attributes1)
             {
-                if (!String.IsNullOrEmpty(attribute.ProductId))
-                {
-                    if (attribute.ProductId != product.Id)
-                    {
-                        warnings.Add("Attribute error");
-                    }
-                }
-                else
+                if (string.IsNullOrEmpty(attribute.ProductId))
                 {
                     warnings.Add("Attribute error");
                     return warnings;
@@ -540,7 +555,18 @@ namespace Grand.Services.Orders
             }
 
             //validate required product attributes (whether they're chosen/selected/entered)
-            var attributes2 = product.ProductAttributeMappings;
+            var attributes2 = product.ProductAttributeMappings.ToList();
+            if (product.ProductType == ProductType.BundledProduct)
+            {
+                foreach (var bundle in product.BundleProducts)
+                {
+                    var p1 = await _productService.GetProductById(bundle.ProductId);
+                    if (p1 != null && p1.ProductAttributeMappings.Any())
+                    {
+                        attributes2.AddRange(p1.ProductAttributeMappings);
+                    }
+                }
+            }
             if (ignoreNonCombinableAttributes)
             {
                 attributes2 = attributes2.Where(x => !x.IsNonCombinable()).ToList();
@@ -588,7 +614,7 @@ namespace Grand.Services.Orders
                 if (a2.AttributeControlType == AttributeControlType.ReadonlyCheckboxes)
                 {
                     //customers cannot edit read-only attributes
-                    var allowedReadOnlyValueIds = a2.ProductAttributeValues.Where(x => x.Id == a2.Id) //_productAttributeService.GetProductAttributeValues(a2.Id)
+                    var allowedReadOnlyValueIds = a2.ProductAttributeValues.Where(x => x.Id == a2.Id)
                         .Where(x => x.IsPreSelected)
                         .Select(x => x.Id)
                         .ToArray();
@@ -968,7 +994,8 @@ namespace Grand.Services.Orders
                 var attributes2 = await _checkoutAttributeService.GetAllCheckoutAttributes(_storeContext.CurrentStore.Id, !shoppingCart.RequiresShipping());
                 foreach (var a2 in attributes2)
                 {
-                    if (a2.IsRequired)
+                    var conditionMet = await _checkoutAttributeParser.IsConditionMet(a2, checkoutAttributesXml);
+                    if (a2.IsRequired && ((conditionMet.HasValue && conditionMet.Value) || !conditionMet.HasValue))
                     {
                         bool found = false;
                         //selected checkout attributes
@@ -1073,7 +1100,18 @@ namespace Grand.Services.Orders
                     //attributes
                     var _product = await _productService.GetProductById(sci.ProductId);
                     bool attributesEqual = _productAttributeParser.AreProductAttributesEqual(_product, sci.AttributesXml, attributesXml, false);
-
+                    if (_product.ProductType == ProductType.BundledProduct)
+                    {
+                        foreach (var bundle in _product.BundleProducts)
+                        {
+                            var p1 = await _productService.GetProductById(bundle.ProductId);
+                            if (p1 != null)
+                            {
+                                if (!_productAttributeParser.AreProductAttributesEqual(p1, sci.AttributesXml, attributesXml, false))
+                                    attributesEqual = false;
+                            }
+                        }
+                    }
                     //gift cards
                     bool giftCardInfoSame = true;
                     if (_product.IsGiftCard)
@@ -1163,7 +1201,7 @@ namespace Grand.Services.Orders
             if (rentalStartDate.HasValue && rentalEndDate.HasValue)
             {
                 var reservations = await _productReservationService.GetProductReservationsByProductId(product.Id, true, null);
-                var reserved = await _productReservationService.GetCustomerReservationsHelpers();
+                var reserved = await _productReservationService.GetCustomerReservationsHelpers(_workContext.CurrentCustomer.Id);
                 foreach (var item in reserved)
                 {
                     var match = reservations.Where(x => x.Id == item.ReservationId).FirstOrDefault();
@@ -1300,9 +1338,8 @@ namespace Grand.Services.Orders
                     customer.ShoppingCartItems.Add(shoppingCartItem);
                     await _customerService.InsertShoppingCartItem(customer.Id, shoppingCartItem);
 
-                    await _customerActionEventService.AddToCart(shoppingCartItem, product, customer);
                     //event notification
-                    await _mediator.EntityInserted(shoppingCartItem);
+                    await _mediator.Publish(new AddToCartEvent(customer, shoppingCartItem, product));
                 }
             }
 
@@ -1331,8 +1368,6 @@ namespace Grand.Services.Orders
                     }
                 }
             }
-
-
             return warnings;
         }
 
@@ -1439,13 +1474,14 @@ namespace Grand.Services.Orders
             if (includeCouponCodes)
             {
                 //discount
-                foreach (var code in await fromCustomer.ParseAppliedDiscountCouponCodes(_genericAttributeService))
-                    await toCustomer.ApplyDiscountCouponCode(_genericAttributeService, code);
+                var coupons = fromCustomer.ParseAppliedCouponCodes(SystemCustomerAttributeNames.DiscountCoupons);
+                var resultcoupons = toCustomer.ApplyCouponCode(SystemCustomerAttributeNames.DiscountCoupons, coupons);
+                await _genericAttributeService.SaveAttribute(toCustomer, SystemCustomerAttributeNames.DiscountCoupons, resultcoupons);
 
                 //gift card
-                foreach (var code in await fromCustomer.ParseAppliedGiftCardCouponCodes(_genericAttributeService))
-                    await toCustomer.ApplyGiftCardCouponCode(_genericAttributeService, code);
-
+                var giftcard = fromCustomer.ParseAppliedCouponCodes(SystemCustomerAttributeNames.GiftCardCoupons);
+                var resultgift = toCustomer.ApplyCouponCode(SystemCustomerAttributeNames.GiftCardCoupons, giftcard);
+                await _genericAttributeService.SaveAttribute(toCustomer, SystemCustomerAttributeNames.GiftCardCoupons, resultgift);
             }
 
             //copy url referer

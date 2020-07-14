@@ -1,4 +1,4 @@
-﻿using Grand.Core.Domain.Customers;
+﻿using Grand.Domain.Customers;
 using Grand.Services.Customers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -58,6 +58,9 @@ namespace Grand.Services.Authentication
 
         public virtual async Task SignIn()
         {
+            if (string.IsNullOrEmpty(_email))
+                throw new ArgumentNullException(nameof(_email));
+
             await SignIn(_email);
         }
 
@@ -67,7 +70,7 @@ namespace Grand.Services.Authentication
         ///<param name="email">Email</param>
         public virtual async Task SignIn(string email)
         {
-            if (string.IsNullOrEmpty(_email))
+            if (string.IsNullOrEmpty(email))
                 throw new ArgumentNullException(nameof(email));
 
             var customer = await _customerService.GetCustomerByEmail(email);
@@ -95,6 +98,15 @@ namespace Grand.Services.Authentication
             if (_cachedCustomer != null)
                 return _cachedCustomer;
 
+            Customer customer = null;
+
+            if (_httpContextAccessor.HttpContext.Request.Path.Value.ToLowerInvariant().Contains("/api/token/create"))
+            {
+                customer = await _customerService.GetCustomerBySystemName(SystemCustomerNames.BackgroundTask);
+                if (customer != null)
+                    return customer;
+            }
+
             //try to get authenticated user identity
             string authHeader = _httpContextAccessor.HttpContext.Request.Headers["Authorization"];
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith(JwtBearerDefaults.AuthenticationScheme))
@@ -103,8 +115,6 @@ namespace Grand.Services.Authentication
             var authenticateResult = await _httpContextAccessor.HttpContext.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
             if (!authenticateResult.Succeeded)
                 return null;
-
-            Customer customer = null;
 
             //try to get customer by email
             var emailClaim = authenticateResult.Principal.Claims.FirstOrDefault(claim => claim.Type == "Email");

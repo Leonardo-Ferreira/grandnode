@@ -1,6 +1,6 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Courses;
-using Grand.Core.Domain.Customers;
+using Grand.Domain.Courses;
+using Grand.Domain.Customers;
 using Grand.Framework.Controllers;
 using Grand.Framework.Kendoui;
 using Grand.Framework.Mvc;
@@ -283,7 +283,7 @@ namespace Grand.Web.Areas.Admin.Controllers
 
         public async Task<IActionResult> AssociateProductToCoursePopup()
         {
-            var model = await _courseViewModelService.PrepareAssociateProductToCourseModel(HttpContext);
+            var model = await _courseViewModelService.PrepareAssociateProductToCourseModel();
             return View(model);
         }
 

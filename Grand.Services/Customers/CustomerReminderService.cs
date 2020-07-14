@@ -1,9 +1,11 @@
 ﻿using Grand.Core;
-using Grand.Core.Data;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Messages;
-using Grand.Core.Domain.Orders;
-using Grand.Core.Domain.Payments;
+using Grand.Domain;
+using Grand.Domain.Data;
+using Grand.Domain.Customers;
+using Grand.Domain.Localization;
+using Grand.Domain.Messages;
+using Grand.Domain.Orders;
+using Grand.Domain.Payments;
 using Grand.Services.Catalog;
 using Grand.Services.Common;
 using Grand.Services.Events;
@@ -14,7 +16,6 @@ using Grand.Services.Messages;
 using Grand.Services.Messages.DotLiquidDrops;
 using Grand.Services.Stores;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using System;
@@ -41,7 +42,7 @@ namespace Grand.Services.Customers
         private readonly IProductService _productService;
         private readonly ICustomerActivityService _customerActivityService;
         private readonly ILocalizationService _localizationService;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly ILanguageService _languageService;
 
         #endregion
 
@@ -61,7 +62,7 @@ namespace Grand.Services.Customers
             ICustomerAttributeParser customerAttributeParser,
             ICustomerActivityService customerActivityService,
             ILocalizationService localizationService,
-            IServiceProvider serviceProvider)
+            ILanguageService languageService)
         {
             _customerReminderRepository = customerReminderRepository;
             _customerReminderHistoryRepository = customerReminderHistoryRepository;
@@ -76,7 +77,7 @@ namespace Grand.Services.Customers
             _productService = productService;
             _customerActivityService = customerActivityService;
             _localizationService = localizationService;
-            _serviceProvider = serviceProvider;
+            _languageService = languageService;
         }
 
         #endregion
@@ -91,7 +92,7 @@ namespace Grand.Services.Customers
 
             //retrieve message template data
             var bcc = reminderLevel.BccEmailAddresses;
-            var languages = await _serviceProvider.GetRequiredService<ILanguageService>().GetAllLanguages();
+            var languages = await _languageService.GetAllLanguages();
             var langId = customer.GetAttributeFromEntity<string>(SystemCustomerAttributeNames.LanguageId, store?.Id);
             if (string.IsNullOrEmpty(langId))
                 langId = languages.FirstOrDefault().Id;
@@ -152,27 +153,23 @@ namespace Grand.Services.Customers
 
             //retrieve message template data
             var bcc = reminderLevel.BccEmailAddresses;
-            var language = _serviceProvider.GetRequiredService<IWorkContext>().WorkingLanguage;
+            Language language = null;
+            if (order != null)
+            {
+                language = await _languageService.GetLanguageById(order.CustomerLanguageId);
+            }
+            else
+            {
+                var customerLanguageId = customer.GetAttributeFromEntity<string>(SystemCustomerAttributeNames.LanguageId);
+                if (!string.IsNullOrEmpty(customerLanguageId))
+                    language = await _languageService.GetLanguageById(customerLanguageId);
+            }
             if (language == null)
             {
-                var languageService = _serviceProvider.GetRequiredService<ILanguageService>();
-                if (order != null)
-                {
-                    language = await languageService.GetLanguageById(order.CustomerLanguageId);
-                }
-                if (language == null)
-                {
-                    var customerLanguageId = customer.GetAttributeFromEntity<string>(SystemCustomerAttributeNames.LanguageId);
-                    if (!string.IsNullOrEmpty(customerLanguageId))
-                        language = await languageService.GetLanguageById(customerLanguageId);
-                }
-                if (language == null)
-                {
-                    language = (await languageService.GetAllLanguages()).FirstOrDefault();
-                }
+                language = (await _languageService.GetAllLanguages()).FirstOrDefault();
             }
 
-            LiquidObject liquidObject = new LiquidObject();
+            var liquidObject = new LiquidObject();
             await _messageTokenProvider.AddStoreTokens(liquidObject, store, language, emailAccount);
             await _messageTokenProvider.AddCustomerTokens(liquidObject, customer, store, language);
             await _messageTokenProvider.AddShoppingCartTokens(liquidObject, customer, store, language);
@@ -222,15 +219,15 @@ namespace Grand.Services.Customers
             {
                 if (item.ConditionType == CustomerReminderConditionTypeEnum.Category)
                 {
-                    cond = await ConditionCategory(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == Core.Domain.Orders.ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
+                    cond = await ConditionCategory(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
                 }
                 if (item.ConditionType == CustomerReminderConditionTypeEnum.Product)
                 {
-                    cond = ConditionProducts(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == Core.Domain.Orders.ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
+                    cond = ConditionProducts(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
                 }
                 if (item.ConditionType == CustomerReminderConditionTypeEnum.Manufacturer)
                 {
-                    cond = await ConditionManufacturer(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == Core.Domain.Orders.ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
+                    cond = await ConditionManufacturer(item, customer.ShoppingCartItems.Where(x => x.ShoppingCartType == ShoppingCartType.ShoppingCart).Select(x => x.ProductId).ToList());
                 }
                 if (item.ConditionType == CustomerReminderConditionTypeEnum.CustomerTag)
                 {

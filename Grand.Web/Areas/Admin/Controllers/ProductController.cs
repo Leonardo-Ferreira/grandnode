@@ -1,6 +1,6 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Customers;
+using Grand.Domain.Catalog;
+using Grand.Domain.Customers;
 using Grand.Framework.Controllers;
 using Grand.Framework.Extensions;
 using Grand.Framework.Kendoui;
@@ -66,7 +66,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             IImportManager importManager,
             IStoreService storeService,
             IProductReservationService productReservationService,
-            IAuctionService auctionService, 
+            IAuctionService auctionService,
             IDateTimeHelper dateTimeHelper)
         {
             _productViewModelService = productViewModelService;
@@ -189,7 +189,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         //edit product
         public async Task<IActionResult> Edit(string id)
         {
-            var product = await _productService.GetProductById(id);
+            var product = await _productService.GetProductById(id, true);
             if (product == null)
                 //No product found with the specified id
                 return RedirectToAction("List");
@@ -233,7 +233,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
         public async Task<IActionResult> Edit(ProductModel model, bool continueEditing)
         {
-            var product = await _productService.GetProductById(model.Id);
+            var product = await _productService.GetProductById(model.Id, true);
             if (product == null)
                 //No product found with the specified id
                 return RedirectToAction("List");
@@ -276,7 +276,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         [HttpPost]
         public async Task<IActionResult> Delete(string id)
         {
-            var product = await _productService.GetProductById(id);
+            var product = await _productService.GetProductById(id, true);
             if (product == null)
                 //No product found with the specified id
                 return RedirectToAction("List");
@@ -318,7 +318,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             var copyModel = model.CopyProductModel;
             try
             {
-                var originalProduct = await _productService.GetProductById(copyModel.Id);
+                var originalProduct = await _productService.GetProductById(copyModel.Id, true);
 
                 //a vendor should have access only to his products
                 if (_workContext.CurrentVendor != null && originalProduct.VendorId != _workContext.CurrentVendor.Id)
@@ -327,6 +327,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 if (_workContext.CurrentCustomer.IsStaff())
                 {
                     originalProduct.LimitedToStores = true;
+                    originalProduct.Stores.Clear();
                     originalProduct.Stores.Add(_workContext.CurrentCustomer.StaffStoreId);
                 }
 
@@ -365,7 +366,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                     ids.Add(str1);
                 }
 
-                var products = await _productService.GetProductsByIds(ids.ToArray());
+                var products = await _productService.GetProductsByIds(ids.ToArray(), true);
                 for (int i = 0; i <= products.Count - 1; i++)
                 {
                     result += products[i].Name;
@@ -407,7 +408,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             var permission = CheckAccessToProduct(product);
             if (!permission.allow)
                 return ErrorForKendoGridJson(permission.message);
-                
+
             var productCategoriesModel = await _productViewModelService.PrepareProductCategoryModel(product);
             var gridModel = new DataSourceResult {
                 Data = productCategoriesModel,
@@ -871,7 +872,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 throw new ArgumentException("No cross-sell product found with the specified id");
 
             if (ModelState.IsValid)
-            {                
+            {
                 await _productViewModelService.DeleteCrossSellProduct(product.Id, crossSellProduct);
                 return new NullJsonResult();
             }
@@ -967,7 +968,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 var associatedProduct = await _productService.GetProductById(model.Id);
                 if (associatedProduct == null)
                     throw new ArgumentException("No associated product found with the specified id");
-                
+
                 associatedProduct.DisplayOrder = model.DisplayOrder;
                 await _productService.UpdateAssociatedProduct(associatedProduct);
 
@@ -1106,7 +1107,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (String.IsNullOrEmpty(attributeId))
                 throw new ArgumentNullException("attributeId");
 
-            var options = (await specificationAttributeService.GetSpecificationAttributeById(attributeId)).SpecificationAttributeOptions;
+            var options = (await specificationAttributeService.GetSpecificationAttributeById(attributeId)).SpecificationAttributeOptions.OrderBy(x => x.DisplayOrder);
             var result = (from o in options
                           select new { id = o.Id, name = o.Name }).ToList();
             return Json(result);
@@ -1175,7 +1176,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 var psa = product.ProductSpecificationAttributes.Where(x => x.Id == model.Id && x.SpecificationAttributeId == model.ProductSpecificationId).FirstOrDefault();
                 if (psa == null)
                     throw new ArgumentException("No specification attribute found with the specified id");
-                
+
                 await _productViewModelService.DeleteProductSpecificationAttribute(product, psa);
                 return new NullJsonResult();
             }
@@ -1209,7 +1210,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         #region Reviews
 
         [HttpPost]
-        public async Task<IActionResult> Reviews(DataSourceRequest command, string productId)
+        public async Task<IActionResult> Reviews(DataSourceRequest command, string productId, [FromServices] IProductReviewService productReviewService)
         {
             var product = await _productService.GetProductById(productId);
 
@@ -1221,7 +1222,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (_workContext.CurrentCustomer.IsStaff())
                 storeId = _workContext.CurrentCustomer.StaffStoreId;
 
-            var productReviews = await _productService.GetAllProductReviews("", null,
+            var productReviews = await productReviewService.GetAllProductReviews("", null,
                 null, null, "", storeId, productId);
 
             var items = new List<ProductReviewModel>();
@@ -1294,7 +1295,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                     .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x)
                     .ToArray();
-                products.AddRange(await _productService.GetProductsByIds(ids));
+                products.AddRange(await _productService.GetProductsByIds(ids, true));
             }
             //a vendor should have access only to his products
             if (_workContext.CurrentVendor != null)
@@ -1335,7 +1336,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                     .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x)
                     .ToArray();
-                products.AddRange(await _productService.GetProductsByIds(ids));
+                products.AddRange(await _productService.GetProductsByIds(ids, true));
             }
             //a vendor should have access only to his products
             if (_workContext.CurrentVendor != null)
@@ -1496,7 +1497,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         {
             if (ModelState.IsValid)
             {
-                var product = await _productService.GetProductById(productId);
+                var product = await _productService.GetProductById(productId, true);
                 if (product == null)
                     throw new ArgumentException("No product found with the specified id");
 
@@ -1521,7 +1522,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         {
             if (ModelState.IsValid)
             {
-                var product = await _productService.GetProductById(model.ProductId);
+                var product = await _productService.GetProductById(model.ProductId, true);
                 if (product == null)
                     throw new ArgumentException("No product found with the specified id");
 
@@ -1638,7 +1639,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (productAttributeMapping == null)
                 return Content("No attribute value found with the specified id");
 
-           
+
             var model = await _productViewModelService.PrepareProductAttributeMappingModel(productAttributeMapping);
             return View(model);
         }
@@ -1826,7 +1827,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (productAttributeMapping == null)
                 //No product attribute found with the specified id
                 return RedirectToAction("List", "Product");
-           
+
             if (productAttributeMapping.AttributeControlType == AttributeControlType.ColorSquares)
             {
                 //ensure valid color is chosen/entered
@@ -1891,7 +1892,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (pav == null)
                 //No attribute value found with the specified id
                 return RedirectToAction("List", "Product");
-           
+
             var productAttributeMapping = product.ProductAttributeMappings.Where(x => x.Id == model.ProductAttributeMappingId).FirstOrDefault();
             if (productAttributeMapping.AttributeControlType == AttributeControlType.ColorSquares)
             {
@@ -2032,7 +2033,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             {
                 var pr = await _productService.GetProductById(productId);
                 pr.StockQuantity = pr.ProductAttributeCombinations.Sum(x => x.StockQuantity);
-                await _productService.UpdateStockProduct(pr);
+                await _productService.UpdateStockProduct(pr, false);
             }
 
             return new NullJsonResult();
@@ -2132,7 +2133,7 @@ namespace Grand.Web.Areas.Admin.Controllers
                 if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
                 {
                     product.StockQuantity = 0;
-                    await _productService.UpdateStockProduct(product);
+                    await _productService.UpdateStockProduct(product, false);
                 }
                 return Json(new { Success = true });
             }

@@ -1,5 +1,5 @@
 ﻿using Grand.Core;
-using Grand.Core.Domain.Catalog;
+using Grand.Domain.Catalog;
 using Grand.Framework.Controllers;
 using Grand.Framework.Kendoui;
 using Grand.Framework.Mvc;
@@ -22,7 +22,7 @@ using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Grand.Core.Domain.Customers;
+using Grand.Domain.Customers;
 
 namespace Grand.Web.Areas.Admin.Controllers
 {
@@ -33,6 +33,7 @@ namespace Grand.Web.Areas.Admin.Controllers
         private readonly IManufacturerViewModelService _manufacturerViewModelService;
         private readonly IManufacturerService _manufacturerService;
         private readonly IWorkContext _workContext;
+        private readonly IStoreContext _storeContext;
         private readonly ICustomerService _customerService;
         private readonly IStoreService _storeService;
         private readonly ILanguageService _languageService;
@@ -47,6 +48,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             IManufacturerViewModelService manufacturerViewModelService,
             IManufacturerService manufacturerService,
             IWorkContext workContext,
+            IStoreContext storeContext,
             ICustomerService customerService,
             IStoreService storeService,
             ILanguageService languageService,
@@ -57,6 +59,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             _manufacturerViewModelService = manufacturerViewModelService;
             _manufacturerService = manufacturerService;
             _workContext = workContext;
+            _storeContext = storeContext;
             _customerService = customerService;
             _storeService = storeService;
             _languageService = languageService;
@@ -95,7 +98,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             var model = new ManufacturerListModel();
             model.AvailableStores.Add(new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = "" });
             foreach (var s in (await _storeService.GetAllStores()).Where(x => x.Id == storeId || string.IsNullOrWhiteSpace(storeId)))
-                model.AvailableStores.Add(new SelectListItem { Text = s.Name, Value = s.Id.ToString() });
+                model.AvailableStores.Add(new SelectListItem { Text = s.Shortcut, Value = s.Id.ToString() });
 
             return View(model);
         }
@@ -367,7 +370,7 @@ namespace Grand.Web.Areas.Admin.Controllers
             if (!permission.allow)
                 return ErrorForKendoGridJson(permission.message);
 
-            var (manufacturerProductModels, totalCount) = await _manufacturerViewModelService.PrepareManufacturerProductModel(manufacturerId, command.Page, command.PageSize);
+            var (manufacturerProductModels, totalCount) = await _manufacturerViewModelService.PrepareManufacturerProductModel(manufacturerId, _storeContext.CurrentStore.Id, command.Page, command.PageSize);
 
             var gridModel = new DataSourceResult
             {

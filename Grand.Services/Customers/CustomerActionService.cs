@@ -1,7 +1,7 @@
-﻿using Grand.Core;
+﻿using Grand.Domain;
 using Grand.Core.Caching;
-using Grand.Core.Data;
-using Grand.Core.Domain.Customers;
+using Grand.Domain.Data;
+using Grand.Domain.Customers;
 using Grand.Services.Events;
 using MediatR;
 using MongoDB.Driver;
@@ -16,7 +16,9 @@ namespace Grand.Services.Customers
     public partial class CustomerActionService : ICustomerActionService
     {
         #region Fields
+
         private const string CUSTOMER_ACTION_TYPE = "Grand.customer.action.type";
+
         private readonly IRepository<CustomerAction> _customerActionRepository;
         private readonly IRepository<CustomerActionType> _customerActionTypeRepository;
         private readonly IRepository<CustomerActionHistory> _customerActionHistoryRepository;

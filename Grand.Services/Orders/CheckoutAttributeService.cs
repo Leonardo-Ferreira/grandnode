@@ -1,8 +1,8 @@
 using Grand.Core;
 using Grand.Core.Caching;
-using Grand.Core.Data;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Orders;
+using Grand.Domain.Data;
+using Grand.Domain.Catalog;
+using Grand.Domain.Orders;
 using Grand.Services.Customers;
 using Grand.Services.Events;
 using MediatR;
@@ -94,8 +94,8 @@ namespace Grand.Services.Orders
 
             await _checkoutAttributeRepository.DeleteAsync(checkoutAttribute);
 
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTES_PATTERN_KEY);
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityDeleted(checkoutAttribute);
@@ -133,6 +133,10 @@ namespace Grand.Services.Orders
                                 select p; 
                     }
                 }
+                if (excludeShippableAttributes)
+                {
+                    query = query.Where(x => !x.ShippableProductRequired);
+                }
                 return query.ToListAsync();
 
             });
@@ -160,8 +164,8 @@ namespace Grand.Services.Orders
 
             await _checkoutAttributeRepository.InsertAsync(checkoutAttribute);
 
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTES_PATTERN_KEY);
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityInserted(checkoutAttribute);
@@ -178,8 +182,8 @@ namespace Grand.Services.Orders
 
             await _checkoutAttributeRepository.UpdateAsync(checkoutAttribute);
 
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTES_PATTERN_KEY);
-            await _cacheManager.RemoveByPattern(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTES_PATTERN_KEY);
+            await _cacheManager.RemoveByPrefix(CHECKOUTATTRIBUTEVALUES_PATTERN_KEY);
 
             //event notification
             await _mediator.EntityUpdated(checkoutAttribute);

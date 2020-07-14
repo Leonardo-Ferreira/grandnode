@@ -1,18 +1,22 @@
 ﻿using Autofac;
-using Autofac.Extensions.DependencyInjection;
 using AutoMapper;
+using Grand.Core.ComponentModel;
 using Grand.Core.Configuration;
 using Grand.Core.Extensions;
 using Grand.Core.Infrastructure.DependencyManagement;
 using Grand.Core.Infrastructure.Mapper;
-using Grand.Core.Infrastructure.MongoDB;
 using Grand.Core.Plugins;
 using Grand.Core.Roslyn;
+using Grand.Core.TypeConverters;
+using Grand.Domain.MongoDB;
+using Grand.Domain.Shipping;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 
 namespace Grand.Core.Infrastructure
@@ -74,6 +78,24 @@ namespace Grand.Core.Infrastructure
             AutoMapperConfiguration.Init(config);
         }
 
+        /// <summary>
+        /// Add attributes to convert some classes
+        /// </summary>
+        protected virtual void RegisterTypeConverter()
+        {
+            TypeDescriptor.AddAttributes(typeof(List<int>), new TypeConverterAttribute(typeof(GenericListTypeConverter<int>)));
+            TypeDescriptor.AddAttributes(typeof(List<decimal>), new TypeConverterAttribute(typeof(GenericListTypeConverter<decimal>)));
+            TypeDescriptor.AddAttributes(typeof(List<string>), new TypeConverterAttribute(typeof(GenericListTypeConverter<string>)));
+
+            //dictionaries
+            TypeDescriptor.AddAttributes(typeof(Dictionary<int, int>), new TypeConverterAttribute(typeof(GenericDictionaryTypeConverter<int, int>)));
+
+            //shipping option
+            TypeDescriptor.AddAttributes(typeof(ShippingOption), new TypeConverterAttribute(typeof(ShippingOptionTypeConverter)));
+            TypeDescriptor.AddAttributes(typeof(List<ShippingOption>), new TypeConverterAttribute(typeof(ShippingOptionListTypeConverter)));
+            TypeDescriptor.AddAttributes(typeof(IList<ShippingOption>), new TypeConverterAttribute(typeof(ShippingOptionListTypeConverter)));
+        }
+
         #endregion
 
         #region Methods
@@ -90,7 +112,9 @@ namespace Grand.Core.Infrastructure
             var config = new GrandConfig();
             configuration.GetSection("Grand").Bind(config);
 
-            CommonHelper.HostingEnvironment = hostingEnvironment;
+            CommonHelper.BaseDirectory = hostingEnvironment.ContentRootPath;
+            CommonHelper.CacheTimeMinutes = config.DefaultCacheTimeMinutes;
+            CommonHelper.CookieAuthExpires = config.CookieAuthExpires > 0 ? config.CookieAuthExpires : 24 * 365;
 
             //register mongo mappings
             MongoDBMapperConfiguration.RegisterMongoDBMappings();
@@ -129,6 +153,9 @@ namespace Grand.Core.Infrastructure
             //register mapper configurations
             AddAutoMapper(services, typeFinder);
 
+            //Add attributes to register custom type converters
+            RegisterTypeConverter();
+
             var config = new GrandConfig();
             configuration.GetSection("Grand").Bind(config);
 
@@ -142,7 +169,8 @@ namespace Grand.Core.Infrastructure
         /// Configure HTTP request pipeline
         /// </summary>
         /// <param name="application">Builder for configuring an application's request pipeline</param>
-        public void ConfigureRequestPipeline(IApplicationBuilder application)
+        /// <param name="webHostEnvironment">WebHostEnvironment</param>
+        public void ConfigureRequestPipeline(IApplicationBuilder application, IWebHostEnvironment webHostEnvironment)
         {
             //find startup configurations provided by other assemblies
             var typeFinder = new WebAppTypeFinder();
@@ -156,7 +184,7 @@ namespace Grand.Core.Infrastructure
 
             //configure request pipeline
             foreach (var instance in instances)
-                instance.Configure(application);
+                instance.Configure(application, webHostEnvironment);
         }
 
         /// <summary>

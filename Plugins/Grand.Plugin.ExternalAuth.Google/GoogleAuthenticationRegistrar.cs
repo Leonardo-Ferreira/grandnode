@@ -1,5 +1,6 @@
 ﻿using Grand.Core.Data;
-using Grand.Core.Domain.Configuration;
+using Grand.Domain.Configuration;
+using Grand.Domain.Data;
 using Grand.Services.Authentication.External;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -25,10 +26,14 @@ namespace Grand.Plugin.ExternalAuth.Google.Infrastructure
         {
             builder.AddGoogle(GoogleDefaults.AuthenticationScheme, options =>
             {
-                var goSettings = new MongoDBRepository<Setting>(DataSettingsHelper.ConnectionString()).Table.Where(x => x.Name.StartsWith("googleexternalauthsettings"));
                 var settings = new GoogleExternalAuthSettings();
-                settings.ClientKeyIdentifier = goSettings.FirstOrDefault(x => x.Name == "googleexternalauthsettings.clientkeyidentifier")?.Value;
-                settings.ClientSecret = goSettings.FirstOrDefault(x => x.Name == "googleexternalauthsettings.clientsecret")?.Value;
+                try
+                {
+                    var goSettings = new Repository<Setting>(DataSettingsHelper.ConnectionString()).Table.Where(x => x.Name.StartsWith("googleexternalauthsettings"));
+                    settings.ClientKeyIdentifier = goSettings.FirstOrDefault(x => x.Name == "googleexternalauthsettings.clientkeyidentifier")?.Value;
+                    settings.ClientSecret = goSettings.FirstOrDefault(x => x.Name == "googleexternalauthsettings.clientsecret")?.Value;
+                }
+                catch { };
 
                 options.ClientId = !string.IsNullOrWhiteSpace(settings.ClientKeyIdentifier) ? settings.ClientKeyIdentifier : "000";
                 options.ClientSecret = !string.IsNullOrWhiteSpace(settings.ClientSecret) ? settings.ClientSecret : "000";

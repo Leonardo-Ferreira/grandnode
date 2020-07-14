@@ -1,4 +1,5 @@
-using Grand.Core.Extensions;
+using Grand.Core.Events;
+using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using System;
@@ -10,13 +11,14 @@ using System.Threading.Tasks;
 namespace Grand.Core.Caching
 {
     /// <summary>
-    /// Represents a manager for caching between HTTP requests (long term caching)
+    /// Represents a manager for memory caching (long term caching)
     /// </summary>
     public partial class MemoryCacheManager : ICacheManager
     {
         #region Fields
 
         private readonly IMemoryCache _cache;
+        private readonly IMediator _mediator;
 
         /// <summary>
         /// Cancellation token for clear cache
@@ -38,9 +40,10 @@ namespace Grand.Core.Caching
             _allKeys = new ConcurrentDictionary<string, bool>();
         }
 
-        public MemoryCacheManager(IMemoryCache cache)
+        public MemoryCacheManager(IMemoryCache cache, IMediator mediator)
         {
             _cache = cache;
+            _mediator = mediator;
             _cancellationTokenSource = new CancellationTokenSource();
         }
 
@@ -141,10 +144,16 @@ namespace Grand.Core.Caching
         /// </summary>
         /// <typeparam name="T">Type of cached item</typeparam>
         /// <param name="key">Key of cached item</param>
+        /// <param name="acquire">Function to load</param>
         /// <returns>The cached value associated with the specified key</returns>
-        public virtual Task<T> GetAsync<T>(string key)
+        public virtual async Task<T> GetAsync<T>(string key, Func<Task<T>> acquire)
         {
-            return Task.FromResult(_cache.Get<T>(key));
+            return await _cache.GetOrCreateAsync(key, entry => 
+            {
+                AddKey(key);
+                entry.SetOptions(GetMemoryCacheEntryOptions(CommonHelper.CacheTimeMinutes));
+                return acquire();
+            });
         }
 
         /// <summary>
@@ -152,35 +161,19 @@ namespace Grand.Core.Caching
         /// </summary>
         /// <typeparam name="T">Type of cached item</typeparam>
         /// <param name="key">Key of cached item</param>
+        /// <param name="acquire">Function to load</param>
         /// <returns>The cached value associated with the specified key</returns>
-        public T Get<T>(string key)
+        public T Get<T>(string key, Func<T> acquire)
         {
-            return _cache.Get<T>(key);
-        }
-
-        /// <summary>
-        /// Gets or sets the value associated with the specified key.
-        /// </summary>
-        /// <param name="key">Key of cached item</param>
-        /// <returns>The cached value associated with the specified key</returns>
-        public virtual (T, bool) TryGetValue<T>(string key)
-        {
-            if (_cache.TryGetValue(key, out T value))
+            return _cache.GetOrCreate(key, entry =>
             {
-                return (value, true);
-            }
-            return (default(T), false);
+                AddKey(key);
+                entry.SetOptions(GetMemoryCacheEntryOptions(CommonHelper.CacheTimeMinutes));
+                return acquire();
+            });
         }
 
-        /// <summary>
-        /// Gets or sets the value associated with the specified key.
-        /// </summary>
-        /// <param name="key">Key of cached item</param>
-        /// <returns>The cached value associated with the specified key</returns>
-        public Task<(T Result, bool FromCache)> TryGetValueAsync<T>(string key)
-        {
-            return Task.FromResult(TryGetValue<T>(key));
-        }
+        
 
         /// <summary>
         /// Adds the specified key and object to the cache
@@ -225,34 +218,53 @@ namespace Grand.Core.Caching
         /// Removes the value with the specified key from the cache
         /// </summary>
         /// <param name="key">Key of cached item</param>
-        public virtual Task RemoveAsync(string key)
+        /// <param name="publisher">publisher</param>
+        public virtual Task RemoveAsync(string key, bool publisher = true)
         {
             _cache.Remove(RemoveKey(key));
+            if (publisher)
+                _mediator.Publish(new EntityCacheEvent(key, CacheEvent.RemoveKey));
+
+            return Task.CompletedTask;
+        }
+
+
+        /// <summary>
+        /// Removes items by key prefix
+        /// </summary>
+        /// <param name="prefix">String prefix</param>
+        /// <param name="publisher">publisher</param>
+        public virtual Task RemoveByPrefix(string prefix, bool publisher = true)
+        {
+            var keysToRemove = _allKeys.Keys.Where(x => x.ToString().StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var key in keysToRemove)
+            {
+                _cache.Remove(RemoveKey(key));
+            }
+            if (publisher)
+                _mediator.Publish(new EntityCacheEvent(prefix, CacheEvent.RemovePrefix));
+
             return Task.CompletedTask;
         }
 
         /// <summary>
-        /// Removes items by key pattern
+        /// Removes items by key prefix
         /// </summary>
-        /// <param name="pattern">String key pattern</param>
-        public virtual async Task RemoveByPattern(string pattern)
+        /// <param name="prefix">String prefix</param>
+        /// <param name="publisher">publisher</param>
+        public virtual Task RemoveByPrefixAsync(string prefix, bool publisher = true)
         {
-            await this.RemoveByPattern(pattern, _allKeys.Where(p => p.Value).Select(p => p.Key));
-        }
+            if (publisher)
+                _mediator.Publish(new EntityCacheEvent(prefix, CacheEvent.RemovePrefix));
 
-        /// <summary>
-        /// Removes items by key pattern
-        /// </summary>
-        /// <param name="pattern">String key pattern</param>
-        public Task RemoveByPatternAsync(string pattern)
-        {
-            return this.RemoveByPattern(pattern, _allKeys.Where(p => p.Value).Select(p => p.Key));
+            return RemoveByPrefix(prefix, publisher);
         }
 
         /// <summary>
         /// Clear all cache data
         /// </summary>
-        public virtual Task Clear()
+        /// <param name="publisher">publisher</param>
+        public virtual Task Clear(bool publisher = true)
         {
             //send cancellation request
             _cancellationTokenSource.Cancel();

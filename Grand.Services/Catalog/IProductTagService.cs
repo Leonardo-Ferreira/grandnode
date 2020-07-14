@@ -1,4 +1,4 @@
-using Grand.Core.Domain.Catalog;
+using Grand.Domain.Catalog;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -53,6 +53,18 @@ namespace Grand.Services.Catalog
         /// </summary>
         /// <param name="productTag">Product tag</param>
         Task UpdateProductTag(ProductTag productTag);
+
+        /// <summary>
+        /// Assign a tag to the product
+        /// </summary>
+        /// <param name="productTag">Product Tag</param>
+        Task AttachProductTag(ProductTag productTag);
+
+        /// <summary>
+        /// Detach a tag from the product
+        /// </summary>
+        /// <param name="productTag">Product Tag</param>
+        Task DetachProductTag(ProductTag productTag);
 
         /// <summary>
         /// Get number of products

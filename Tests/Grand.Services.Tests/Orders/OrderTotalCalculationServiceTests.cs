@@ -1,12 +1,12 @@
 ﻿using Grand.Core;
-using Grand.Core.Data;
-using Grand.Core.Domain.Catalog;
-using Grand.Core.Domain.Common;
-using Grand.Core.Domain.Customers;
-using Grand.Core.Domain.Orders;
-using Grand.Core.Domain.Shipping;
-using Grand.Core.Domain.Stores;
-using Grand.Core.Domain.Tax;
+using Grand.Domain.Data;
+using Grand.Domain.Catalog;
+using Grand.Domain.Common;
+using Grand.Domain.Customers;
+using Grand.Domain.Orders;
+using Grand.Domain.Shipping;
+using Grand.Domain.Stores;
+using Grand.Domain.Tax;
 using Grand.Core.Plugins;
 using Grand.Core.Tests.Caching;
 using Grand.Services.Catalog;
@@ -67,6 +67,7 @@ namespace Grand.Services.Orders.Tests
         private AddressSettings _addressSettings;
         private IVendorService _vendorService;
         private ICustomerService _customerService;
+        private ICustomerProductService _customerProductService;
         private ICurrencyService _currencyService;
         private IServiceProvider _serviceProvider;
         private IStateProvinceService _stateProvinceService;
@@ -88,9 +89,14 @@ namespace Grand.Services.Orders.Tests
             }
 
             _productService = new Mock<IProductService>().Object;
+            var tempEventPublisher = new Mock<IMediator>();
+            {
+                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
+                _eventPublisher = tempEventPublisher.Object;
+            }
 
             var pluginFinder = new PluginFinder(_serviceProvider);
-            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object);
+            var cacheManager = new TestMemoryCacheManager(new Mock<IMemoryCache>().Object, _eventPublisher);
 
             _discountService = new Mock<IDiscountService>().Object;
             _categoryService = new Mock<ICategoryService>().Object;
@@ -103,19 +109,15 @@ namespace Grand.Services.Orders.Tests
             _shoppingCartSettings = new ShoppingCartSettings();
             _catalogSettings = new CatalogSettings();
             _customerService = new Mock<ICustomerService>().Object;
+            _customerProductService = new Mock<ICustomerProductService>().Object;
 
             _priceCalcService = new PriceCalculationService(_workContext, _storeContext,
                 _discountService, _categoryService,
-                _manufacturerService, _productAttributeParser, _productService, _customerService,
-                cacheManager, _vendorService, _currencyService,
+                _manufacturerService, _productAttributeParser, _productService, _customerProductService,
+                _vendorService, _currencyService,
                 _shoppingCartSettings, _catalogSettings);
 
-            var tempEventPublisher = new Mock<IMediator>();
-            {
-                //tempEventPublisher.Setup(x => x.PublishAsync(It.IsAny<object>()));
-                _eventPublisher = tempEventPublisher.Object;
-            }
-
+           
             _localizationService = new Mock<ILocalizationService>().Object;
 
             //shipping
@@ -154,11 +156,9 @@ namespace Grand.Services.Orders.Tests
             _countryService,
             _stateProvinceService,
             pluginFinder,
-            _storeContext,
             _eventPublisher,
             _currencyService,
             cacheManager,
-            null,
             _shoppingCartSettings,
             _shippingSettings);
 
@@ -171,14 +171,13 @@ namespace Grand.Services.Orders.Tests
                 _addressService = tempAddressService.Object;
             }
 
-            _taxService = new TaxService(_addressService, _workContext, _taxSettings,
-                pluginFinder, _geoLookupService, _countryService, _serviceProvider, _logger, _customerSettings, _addressSettings);
+            _taxService = new TaxService(_addressService, _workContext, pluginFinder, _geoLookupService, _countryService, _logger, _taxSettings, _customerSettings, _addressSettings);
 
             _rewardPointsSettings = new RewardPointsSettings();
 
             _orderTotalCalcService = new OrderTotalCalculationService(_workContext, _storeContext,
                 _priceCalcService, _taxService, _shippingService, _paymentService,
-                _checkoutAttributeParser, _discountService, _giftCardService, _genericAttributeService,
+                _checkoutAttributeParser, _discountService, _giftCardService,
                 null, _productService, _currencyService, _taxSettings, _rewardPointsSettings,
                 _shippingSettings, _shoppingCartSettings, _catalogSettings);
         }
